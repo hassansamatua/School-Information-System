@@ -78,8 +78,8 @@ export async function GET(request: NextRequest) {
         LEFT JOIN users u ON u.id = a.recordedBy
         ${whereClause}
         ORDER BY a.date DESC
-        LIMIT ? OFFSET ?`,
-        [...params, limit, offset]
+        LIMIT ${Number(limit)} OFFSET ${Number(offset)}`,
+        params
       ),
       executeQuery<{ total: number }>(
         `SELECT COUNT(*) AS total FROM attendance a ${whereClause}`,
@@ -95,7 +95,8 @@ export async function GET(request: NextRequest) {
     })
   } catch (error) {
     console.error('Error fetching attendance:', error)
-    return NextResponse.json({ error: 'Failed to fetch attendance' }, { status: 500 })
+    const message = error instanceof Error ? error.message : 'Failed to fetch attendance'
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }
 

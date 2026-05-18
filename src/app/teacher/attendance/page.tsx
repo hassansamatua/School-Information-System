@@ -128,6 +128,9 @@ export default function AttendancePage() {
       )
       const attendanceResponses = await Promise.all(attendancePromises)
       const attendanceData = attendanceResponses.map((res: any) => res.data || []).flat()
+      console.log('[Teacher Attendance] Loaded records:', attendanceData)
+      console.log('[Teacher Attendance] Selected date:', selectedDate)
+      console.log('[Teacher Attendance] Selected class:', selectedClass)
       setAttendanceRecords(attendanceData)
     } catch (error: any) {
       console.error('Error loading attendance data:', error)
@@ -151,7 +154,14 @@ export default function AttendancePage() {
 
   const filteredAttendanceRecords = attendanceRecords.filter(record => {
     const matchesClass = !selectedClass || record.classId === selectedClass
-    const matchesDate = record.date === selectedDate
+    // Normalize date to YYYY-MM-DD format for comparison (DB may return ISO strings or Date objects)
+    let recordDate = ''
+    if (record.date) {
+      const dateStr = String(record.date)
+      // If already in YYYY-MM-DD format, use directly; else parse and extract date part
+      recordDate = dateStr.length === 10 ? dateStr : dateStr.split('T')[0]
+    }
+    const matchesDate = recordDate === selectedDate
     return matchesClass && matchesDate
   })
 
@@ -242,13 +252,14 @@ export default function AttendancePage() {
   }
 
   const getAttendanceStats = () => {
+    const totalStudents = filteredStudents.length
     const total = filteredAttendanceRecords.length
     const present = filteredAttendanceRecords.filter(r => r.status === 'PRESENT').length
     const absent = filteredAttendanceRecords.filter(r => r.status === 'ABSENT').length
     const late = filteredAttendanceRecords.filter(r => r.status === 'LATE').length
     const excused = filteredAttendanceRecords.filter(r => r.status === 'EXCUSED').length
 
-    return { total, present, absent, late, excused }
+    return { totalStudents, total, present, absent, late, excused }
   }
 
   const stats = getAttendanceStats()
@@ -268,7 +279,7 @@ export default function AttendancePage() {
               <Users className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats.total}</div>
+              <div className="text-2xl font-bold">{stats.totalStudents}</div>
               <p className="text-xs text-muted-foreground">In selected class</p>
             </CardContent>
           </Card>

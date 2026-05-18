@@ -218,23 +218,226 @@ export default function ReportsPage() {
     }
   }
 
-  const handleDownloadReport = async (report: Report) => {
+  const fetchReportData = async (report: Report) => {
+    let endpoint = ''
+    switch (report.type) {
+      case 'ATTENDANCE': endpoint = '/api/attendance?limit=10000'; break
+      case 'PERFORMANCE': endpoint = '/api/performance?limit=10000'; break
+      case 'RESULTS': endpoint = '/api/results'; break
+      case 'STUDENT_LIST': endpoint = '/api/students'; break
+      case 'TEACHER_ACTIVITY': endpoint = '/api/teachers'; break
+      case 'PARENT_LIST': endpoint = '/api/parents'; break
+      default: throw new Error('Unknown report type')
+    }
+    const res = await fetch(endpoint)
+    if (!res.ok) {
+      let errMsg = `Failed to fetch data (${res.status})`
+      try {
+        const errJson = await res.json()
+        if (errJson.error) errMsg = `${errMsg}: ${errJson.error}`
+      } catch {}
+      throw new Error(errMsg)
+    }
+    const json = await res.json()
+    let data = Array.isArray(json) ? json : (json.data || [])
+    // Flatten nested objects
+    data = data.map((row: any) => {
+      const flat: any = {}
+      for (const [key, val] of Object.entries(row)) {
+        if (val !== null && typeof val === 'object' && !Array.isArray(val)) {
+          for (const [nk, nv] of Object.entries(val as any)) {
+            flat[`${key}_${nk}`] = nv
+          }
+        } else if (!Array.isArray(val)) {
+          flat[key] = val
+        }
+      }
+      return flat
+    })
+    return data
+  }
+
+  const handleDownloadCSV = async (report: Report) => {
     try {
-      if (!report.fileUrl) {
-        toast.error('Report file not available')
+      toast.info(`Generating ${report.name} (CSV)...`)
+      const data = await fetchReportData(report)
+      if (data.length === 0) {
+        toast.warning('No data available for this report')
         return
       }
-      
-      // Mock download
-      toast.success(`Downloading ${report.name}...`)
-      
-      // Simulate download completion
-      setTimeout(() => {
-        toast.success(`${report.name} downloaded successfully`)
-      }, 2000)
-    } catch (error) {
-      toast.error('Failed to download report')
+      const headers = Object.keys(data[0])
+      const csvRows = [
+        headers.join(','),
+        ...data.map((row: any) =>
+          headers.map(h => {
+            const val = row[h]
+            if (val === null || val === undefined) return ''
+            const str = String(val).replace(/"/g, '""')
+            return /[",\n]/.test(str) ? `"${str}"` : str
+          }).join(',')
+        )
+      ]
+      const csv = csvRows.join('\n')
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      const fileName = `${report.name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.csv`
+      link.setAttribute('download', fileName)
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+      toast.success(`${fileName} downloaded`)
+    } catch (error: any) {
+      console.error('CSV download error:', error)
+      toast.error(error?.message || 'Failed to download CSV')
     }
+  }
+
+  const handleDownloadPDF = async (report: Report) => {
+    try {
+      toast.info(`Generating ${report.name} (PDF)...`)
+      const data = await fetchReportData(report)
+      if (data.length === 0) {
+        toast.warning('No data available for this report')
+        return
+      }
+
+      // Dynamic imports to keep page bundle small
+      const { jsPDF } = await import('jspdf')
+      const autoTable = (await import('jspdf-autotable')).default
+
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' })
+      const pageWidth = doc.internal.pageSize.getWidth()
+
+      // Header
+      doc.setFontSize(18)
+      doc.setFont('helvetica', 'bold')
+      doc.text(report.name, pageWidth / 2, 40, { align: 'center' })
+      doc.setFontSize(10)
+      doc.setFont('helvetica', 'normal')
+      doc.setTextColor(100)
+      doc.text(`Generated: ${new Date().toLocaleString()}`, pageWidth / 2, 58, { align: 'center' })
+      doc.text(`Total Records: ${data.length}`, pageWidth / 2, 72, { align: 'center' })
+      doc.setTextColor(0)
+
+      // Build summary stats based on report type
+      const summary = buildSummary(report.type, data)
+
+      let chartY = 90
+      if (summary.length > 0) {
+        // Draw bar chart
+        const chartHeight = 160
+        const chartTop = chartY + 20
+        const chartLeft = 60
+        const chartRight = pageWidth - 60
+        const chartWidth = chartRight - chartLeft
+        const maxVal = Math.max(...summary.map(s => s.value), 1)
+        const barWidth = chartWidth / summary.length * 0.6
+        const barGap = chartWidth / summary.length * 0.4
+
+        doc.setFontSize(12)
+        doc.setFont('helvetica', 'bold')
+        doc.text('Summary Visualization', chartLeft, chartY)
+
+        // Y-axis line
+        doc.setDrawColor(180)
+        doc.line(chartLeft, chartTop, chartLeft, chartTop + chartHeight)
+        doc.line(chartLeft, chartTop + chartHeight, chartRight, chartTop + chartHeight)
+
+        // Bars
+        const colors: [number, number, number][] = [
+          [59, 130, 246], [16, 185, 129], [239, 68, 68],
+          [245, 158, 11], [139, 92, 246], [236, 72, 153],
+          [14, 165, 233], [132, 204, 22],
+        ]
+        summary.forEach((s, i) => {
+          const x = chartLeft + (chartWidth / summary.length) * i + barGap / 2
+          const h = (s.value / maxVal) * (chartHeight - 20)
+          const y = chartTop + chartHeight - h
+          const color = colors[i % colors.length]
+          doc.setFillColor(color[0], color[1], color[2])
+          doc.rect(x, y, barWidth, h, 'F')
+          // Value on top
+          doc.setFontSize(9)
+          doc.setFont('helvetica', 'bold')
+          doc.setTextColor(0)
+          doc.text(String(s.value), x + barWidth / 2, y - 4, { align: 'center' })
+          // Label below
+          doc.setFont('helvetica', 'normal')
+          doc.setFontSize(8)
+          doc.text(s.label, x + barWidth / 2, chartTop + chartHeight + 12, { align: 'center' })
+        })
+        chartY = chartTop + chartHeight + 30
+      }
+
+      // Table with all records
+      const headers = Object.keys(data[0]).slice(0, 8) // limit to 8 columns for readability
+      const rows = data.map((row: any) =>
+        headers.map(h => {
+          const v = row[h]
+          if (v === null || v === undefined) return ''
+          if (typeof v === 'string' && v.length > 30) return v.slice(0, 27) + '...'
+          return String(v)
+        })
+      )
+
+      autoTable(doc, {
+        startY: chartY,
+        head: [headers],
+        body: rows,
+        styles: { fontSize: 8, cellPadding: 3 },
+        headStyles: { fillColor: [59, 130, 246], textColor: 255, fontStyle: 'bold' },
+        alternateRowStyles: { fillColor: [245, 247, 250] },
+        margin: { left: 30, right: 30 },
+      })
+
+      const fileName = `${report.name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`
+      doc.save(fileName)
+      toast.success(`${fileName} downloaded`)
+    } catch (error: any) {
+      console.error('PDF download error:', error)
+      toast.error(error?.message || 'Failed to download PDF')
+    }
+  }
+
+  // Build summary stats per report type for chart visualization
+  const buildSummary = (type: string, data: any[]): { label: string; value: number }[] => {
+    const counts: Record<string, number> = {}
+    const tally = (key: string) => {
+      const v = key || 'Unknown'
+      counts[v] = (counts[v] || 0) + 1
+    }
+    switch (type) {
+      case 'ATTENDANCE':
+        data.forEach(r => tally(r.status))
+        break
+      case 'PERFORMANCE':
+        data.forEach(r => tally(r.subject))
+        break
+      case 'RESULTS':
+        data.forEach(r => tally(r.grade))
+        break
+      case 'STUDENT_LIST':
+        data.forEach(r => tally(r.className || `Form ${r.form || ''}`))
+        break
+      case 'TEACHER_ACTIVITY':
+        data.forEach(r => tally(r.department || 'No Dept'))
+        break
+      case 'PARENT_LIST':
+        data.forEach(r => tally(r.relationship || 'Parent'))
+        break
+    }
+    return Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8)
+      .map(([label, value]) => ({ label, value }))
+  }
+
+  const handleDownloadReport = async (report: Report) => {
+    // Default to CSV when called without format
+    await handleDownloadCSV(report)
   }
 
   const getReportName = (type: string) => {
@@ -584,13 +787,26 @@ export default function ReportsPage() {
                       <TableCell>
                         <div className="flex items-center space-x-2">
                           {report.status === 'COMPLETED' && report.fileUrl && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleDownloadReport(report)}
-                            >
-                              <Download className="h-4 w-4" />
-                            </Button>
+                            <>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleDownloadCSV(report)}
+                                title="Download CSV"
+                              >
+                                <FileSpreadsheet className="h-4 w-4 mr-1" />
+                                CSV
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleDownloadPDF(report)}
+                                title="Download PDF with charts"
+                              >
+                                <FileText className="h-4 w-4 mr-1" />
+                                PDF
+                              </Button>
+                            </>
                           )}
                           {report.status === 'GENERATING' && (
                             <div className="flex items-center space-x-2 text-sm text-yellow-600">

@@ -80,11 +80,27 @@ export async function GET(request: NextRequest) {
       if (type) { where.push('a.type = ?'); params.push(type) }
     } else {
       where.push("a.status = 'PUBLISHED'")
-      // Filter by audience: ALL is visible to everyone; TEACHERS to teachers; PARENTS to parents.
       if (session.role === 'TEACHER') {
         where.push("a.targetAudience IN ('ALL', 'TEACHERS')")
       } else if (session.role === 'PARENT') {
-        where.push("a.targetAudience IN ('ALL', 'PARENTS', 'SPECIFIC_CLASS', 'SPECIFIC_STUDENT', 'SPECIFIC')")
+        // Parent sees: ALL, PARENTS, SPECIFIC_CLASS (only when targetId contains their child's classId),
+        // SPECIFIC_STUDENT (only when targetId contains their child's id), SPECIFIC (only when targetId contains their userId)
+        // targetId may be a comma-separated list of IDs
+        where.push(`(
+          a.targetAudience IN ('ALL', 'PARENTS')
+          OR (a.targetAudience = 'SPECIFIC_CLASS' AND EXISTS (
+            SELECT 1 FROM students s
+            WHERE s.parentId IN (SELECT id FROM parents WHERE userId = ?)
+              AND FIND_IN_SET(s.classId, a.targetId) > 0
+          ))
+          OR (a.targetAudience = 'SPECIFIC_STUDENT' AND EXISTS (
+            SELECT 1 FROM students s
+            WHERE s.parentId IN (SELECT id FROM parents WHERE userId = ?)
+              AND FIND_IN_SET(s.id, a.targetId) > 0
+          ))
+          OR (a.targetAudience = 'SPECIFIC' AND FIND_IN_SET(?, a.targetId) > 0)
+        )`)
+        params.push(session.userId, session.userId, session.userId)
       }
     }
 

@@ -93,30 +93,13 @@ export default function SubmissionsPage() {
 
   const loadSubmissions = async () => {
     try {
-      // Fetch teacher's data - try to find by userId if available, otherwise by email
-      const teachersRes = await fetch('/api/teachers')
-      if (!teachersRes.ok) throw new Error('Failed to load teacher data')
-      const teachersResponse = await teachersRes.json()
-      const teachersData = Array.isArray(teachersResponse) ? teachersResponse : (teachersResponse.data || [])
-      
-      // Try to find teacher by userId first, then by email
-      let teacherData = teachersData.find((t: any) => t.userId === user?.id)
-      if (!teacherData) {
-        teacherData = teachersData.find((t: any) => t.email === user?.email)
-      }
-      
-      if (!teacherData) {
-        console.warn('Teacher data not found for user:', user?.email, 'userId:', user?.id)
-        setSubmissions([])
-        return
-      }
-
-      // Fetch submissions and filter by teacher's userId
+      // The API already filters by current teacher's userId via session, so no need to filter again
       const res = await fetch('/api/submissions')
       if (!res.ok) throw new Error(`Failed to load (${res.status})`)
       const data = await res.json()
-      const teacherSubmissions = data.filter((s: any) => s.submittedBy === teacherData.userId)
-      setSubmissions(teacherSubmissions)
+      const submissions = Array.isArray(data) ? data : (data.data || [])
+      console.log('[Teacher Submissions] Loaded:', submissions.length, submissions)
+      setSubmissions(submissions)
     } catch (e) {
       console.error(e)
       toast.error('Failed to load submissions')

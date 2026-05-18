@@ -81,7 +81,24 @@ export async function GET(request: NextRequest) {
       if (session.role === 'TEACHER') {
         where.push("e.targetAudience IN ('ALL', 'TEACHERS')")
       } else if (session.role === 'PARENT') {
-        where.push("e.targetAudience IN ('ALL', 'PARENTS', 'SPECIFIC_CLASS', 'SPECIFIC_STUDENT', 'SPECIFIC')")
+        // Parent sees: ALL, PARENTS, SPECIFIC_CLASS (only when targetId contains their child's classId),
+        // SPECIFIC_STUDENT (only when targetId contains their child's id), SPECIFIC (only when targetId contains their userId)
+        // targetId may be a comma-separated list of IDs
+        where.push(`(
+          e.targetAudience IN ('ALL', 'PARENTS')
+          OR (e.targetAudience = 'SPECIFIC_CLASS' AND EXISTS (
+            SELECT 1 FROM students s
+            WHERE s.parentId IN (SELECT id FROM parents WHERE userId = ?)
+              AND FIND_IN_SET(s.classId, e.targetId) > 0
+          ))
+          OR (e.targetAudience = 'SPECIFIC_STUDENT' AND EXISTS (
+            SELECT 1 FROM students s
+            WHERE s.parentId IN (SELECT id FROM parents WHERE userId = ?)
+              AND FIND_IN_SET(s.id, e.targetId) > 0
+          ))
+          OR (e.targetAudience = 'SPECIFIC' AND FIND_IN_SET(?, e.targetId) > 0)
+        )`)
+        params.push(session.userId, session.userId, session.userId)
       }
     }
     if (upcoming) where.push('e.eventDate >= CURDATE()')
