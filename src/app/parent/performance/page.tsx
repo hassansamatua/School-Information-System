@@ -32,6 +32,7 @@ import {
   GraduationCap,
   Download,
   BarChart3,
+  AlertCircle,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -40,25 +41,21 @@ interface Student {
   registrationNumber: string
   firstName: string
   lastName: string
-  classId: string
-  className: string
+  classId: string | null
+  className: string | null
+  parentId: string | null
 }
 
 interface PerformanceRecord {
   id: string
   studentId: string
-  studentName: string
-  registrationNumber: string
-  classId: string
-  className: string
   subject: string
   assessmentType: 'QUIZ' | 'TEST' | 'ASSIGNMENT' | 'PROJECT' | 'EXAM'
   score: number
   maxScore: number
-  grade?: string
-  remarks?: string
+  grade: string
   assessmentDate: string
-  recordedAt: string
+  remarks?: string
 }
 
 interface Result {
@@ -91,148 +88,53 @@ export default function PerformancePage() {
 
   const subjects = ['Mathematics', 'Science', 'English', 'History', 'Geography', 'Art', 'Music', 'Physical Education']
 
-  // Mock data - in real app, this would come from API
-  useEffect(() => {
-    const mockStudents: Student[] = [
-      { id: '1', registrationNumber: 'REG2024001', firstName: 'Alice', lastName: 'Johnson', classId: '1', className: 'Grade 5-A' },
-      { id: '2', registrationNumber: 'REG2024002', firstName: 'Bob', lastName: 'Johnson', classId: '2', className: 'Grade 4-B' },
-    ]
+  const loadData = async () => {
+    try {
+      // Fetch parent's children
+      const parentsRes = await fetch('/api/parents')
+      if (!parentsRes.ok) throw new Error('Failed to load parent data')
+      const parentsData = await parentsRes.json()
+      const parentData = parentsData.find((p: any) => p.email === user?.email)
+      
+      if (!parentData) {
+        throw new Error('Parent data not found')
+      }
 
-    const mockPerformanceRecords: PerformanceRecord[] = [
-      {
-        id: '1',
-        studentId: '1',
-        studentName: 'Alice Johnson',
-        registrationNumber: 'REG2024001',
-        classId: '1',
-        className: 'Grade 5-A',
-        subject: 'Mathematics',
-        assessmentType: 'TEST',
-        score: 85,
-        maxScore: 100,
-        grade: 'B',
-        remarks: 'Good performance',
-        assessmentDate: '2024-03-10',
-        recordedAt: '2024-03-10T15:30:00Z',
-      },
-      {
-        id: '2',
-        studentId: '1',
-        studentName: 'Alice Johnson',
-        registrationNumber: 'REG2024001',
-        classId: '1',
-        className: 'Grade 5-A',
-        subject: 'Science',
-        assessmentType: 'QUIZ',
-        score: 92,
-        maxScore: 100,
-        grade: 'A',
-        remarks: 'Excellent work',
-        assessmentDate: '2024-03-08',
-        recordedAt: '2024-03-08T14:20:00Z',
-      },
-      {
-        id: '3',
-        studentId: '1',
-        studentName: 'Alice Johnson',
-        registrationNumber: 'REG2024001',
-        classId: '1',
-        className: 'Grade 5-A',
-        subject: 'English',
-        assessmentType: 'ASSIGNMENT',
-        score: 88,
-        maxScore: 100,
-        grade: 'B',
-        remarks: 'Well written',
-        assessmentDate: '2024-03-05',
-        recordedAt: '2024-03-05T16:45:00Z',
-      },
-      {
-        id: '4',
-        studentId: '2',
-        studentName: 'Bob Johnson',
-        registrationNumber: 'REG2024002',
-        classId: '2',
-        className: 'Grade 4-B',
-        subject: 'Mathematics',
-        assessmentType: 'TEST',
-        score: 78,
-        maxScore: 100,
-        grade: 'C',
-        remarks: 'Needs improvement',
-        assessmentDate: '2024-03-12',
-        recordedAt: '2024-03-12T10:15:00Z',
-      },
-      {
-        id: '5',
-        studentId: '2',
-        studentName: 'Bob Johnson',
-        registrationNumber: 'REG2024002',
-        classId: '2',
-        className: 'Grade 4-B',
-        subject: 'Science',
-        assessmentType: 'QUIZ',
-        score: 85,
-        maxScore: 100,
-        grade: 'B',
-        remarks: 'Good understanding',
-        assessmentDate: '2024-03-09',
-        recordedAt: '2024-03-09T11:30:00Z',
-      },
-    ]
+      // Fetch students
+      const studentsRes = await fetch('/api/students')
+      if (!studentsRes.ok) throw new Error('Failed to load students')
+      const allStudents = await studentsRes.json()
+      const parentChildren = allStudents.filter((s: any) => s.parentId === parentData.id)
+      setStudents(parentChildren)
 
-    const mockResults: Result[] = [
-      {
-        id: '1',
-        studentId: '1',
-        studentName: 'Alice Johnson',
-        examType: 'MIDTERM',
-        term: 'Term 2',
-        academicYear: '2023-2024',
-        subjects: [
-          { subject: 'Mathematics', marks: 85, maxMarks: 100, grade: 'B' },
-          { subject: 'Science', marks: 92, maxMarks: 100, grade: 'A' },
-          { subject: 'English', marks: 88, maxMarks: 100, grade: 'B' },
-          { subject: 'History', marks: 90, maxMarks: 100, grade: 'A' },
-        ],
-        totalMarks: 355,
-        maxTotalMarks: 400,
-        percentage: 88.75,
-        grade: 'B',
-        rank: 5,
-        remarks: 'Good overall performance',
-        publishedAt: '2024-03-10T09:00:00Z',
-      },
-      {
-        id: '2',
-        studentId: '2',
-        studentName: 'Bob Johnson',
-        examType: 'MIDTERM',
-        term: 'Term 2',
-        academicYear: '2023-2024',
-        subjects: [
-          { subject: 'Mathematics', marks: 78, maxMarks: 100, grade: 'C' },
-          { subject: 'Science', marks: 85, maxMarks: 100, grade: 'B' },
-          { subject: 'English', marks: 82, maxMarks: 100, grade: 'B' },
-          { subject: 'History', marks: 80, maxMarks: 100, grade: 'B' },
-        ],
-        totalMarks: 325,
-        maxTotalMarks: 400,
-        percentage: 81.25,
-        grade: 'B',
-        rank: 12,
-        remarks: 'Needs more practice',
-        publishedAt: '2024-03-10T09:00:00Z',
-      },
-    ]
+      // Fetch performance for children
+      if (parentChildren.length > 0) {
+        const performancePromises = parentChildren.map((child: Student) =>
+          fetch(`/api/performance?studentId=${child.id}`).then(res => res.json())
+        )
+        const performanceResponses = await Promise.all(performancePromises)
+        const performanceData = performanceResponses.map((res: any) => res.data || []).flat()
+        setPerformanceRecords(performanceData)
 
-    setTimeout(() => {
-      setStudents(mockStudents)
-      setPerformanceRecords(mockPerformanceRecords)
-      setResults(mockResults)
+        // Fetch results for children
+        const resultsPromises = parentChildren.map((child: Student) =>
+          fetch(`/api/results?studentId=${child.id}`).then(res => res.json())
+        )
+        const resultsResponses = await Promise.all(resultsPromises)
+        const resultsData = resultsResponses.map((res: any) => res.data || []).flat()
+        setResults(resultsData)
+      }
+    } catch (error: any) {
+      console.error('Error loading performance data:', error)
+    } finally {
       setIsLoading(false)
-    }, 1000)
-  }, [])
+    }
+  }
+
+  useEffect(() => {
+    if (!isAuthorized || !user) return
+    loadData()
+  }, [isAuthorized, user])
 
   const filteredStudents = students.filter(student => {
     const matchesSearch = student.firstName.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -389,12 +291,15 @@ export default function PerformancePage() {
         {/* Filters and Actions */}
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
-            <Select value={selectedStudent} onValueChange={setSelectedStudent}>
+            <Select
+              value={selectedStudent || '__ALL__'}
+              onValueChange={(v) => setSelectedStudent(v === '__ALL__' ? '' : v)}
+            >
               <SelectTrigger className="w-[200px]">
                 <SelectValue placeholder="Select child" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Children</SelectItem>
+                <SelectItem value="__ALL__">All Children</SelectItem>
                 {filteredStudents.map((student) => (
                   <SelectItem key={student.id} value={student.id}>
                     {student.firstName} {student.lastName}
@@ -403,24 +308,30 @@ export default function PerformancePage() {
               </SelectContent>
             </Select>
             
-            <Select value={selectedSubject} onValueChange={setSelectedSubject}>
+            <Select
+              value={selectedSubject || '__ALL__'}
+              onValueChange={(v) => setSelectedSubject(v === '__ALL__' ? '' : v)}
+            >
               <SelectTrigger className="w-[180px]">
                 <SelectValue placeholder="Select subject" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Subjects</SelectItem>
+                <SelectItem value="__ALL__">All Subjects</SelectItem>
                 {subjects.map((subject) => (
                   <SelectItem key={subject} value={subject}>{subject}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
             
-            <Select value={selectedAssessmentType} onValueChange={setSelectedAssessmentType}>
+            <Select
+              value={selectedAssessmentType || '__ALL__'}
+              onValueChange={(v) => setSelectedAssessmentType(v === '__ALL__' ? '' : v)}
+            >
               <SelectTrigger className="w-[180px]">
                 <SelectValue placeholder="Select type" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Types</SelectItem>
+                <SelectItem value="__ALL__">All Types</SelectItem>
                 <SelectItem value="QUIZ">Quiz</SelectItem>
                 <SelectItem value="TEST">Test</SelectItem>
                 <SelectItem value="ASSIGNMENT">Assignment</SelectItem>
@@ -536,53 +447,50 @@ export default function PerformancePage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredPerformanceRecords.map((record) => (
-                    <TableRow key={record.id}>
-                      <TableCell>
-                        <div className="flex items-center space-x-2">
-                          <GraduationCap className="h-4 w-4 text-gray-400" />
-                          <div>
-                            <div className="font-medium">{record.studentName}</div>
-                            <div className="text-sm text-gray-500">{record.registrationNumber}</div>
+                  {filteredPerformanceRecords.map((record) => {
+                    const student = students.find(s => s.id === record.studentId)
+                    if (!student) return null
+                    return (
+                      <TableRow key={record.id}>
+                        <TableCell>
+                          <div className="flex items-center space-x-2">
+                            <GraduationCap className="h-4 w-4 text-gray-400" />
+                            <span>{student.firstName} {student.lastName}</span>
                           </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center space-x-2">
-                          <BookOpen className="h-4 w-4 text-gray-400" />
-                          <span>{record.subject}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>{getAssessmentTypeBadge(record.assessmentType)}</TableCell>
-                      <TableCell>
-                        <div className="flex items-center space-x-2">
-                          <Target className="h-4 w-4 text-gray-400" />
-                          <span>{record.score}/{record.maxScore}</span>
-                          <span className="text-sm text-gray-500">
-                            ({((record.score / record.maxScore) * 100).toFixed(1)}%)
-                          </span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <span className={`font-semibold ${getGradeColor(record.grade || '')}`}>
-                          {record.grade || 'N/A'}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center space-x-1">
-                          <Calendar className="h-4 w-4 text-gray-400" />
-                          <span>{new Date(record.assessmentDate).toLocaleDateString()}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {record.remarks ? (
-                          <span className="text-sm text-gray-600">{record.remarks}</span>
-                        ) : (
-                          <span className="text-sm text-gray-400">No remarks</span>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                        </TableCell>
+                        <TableCell>{student.registrationNumber}</TableCell>
+                        <TableCell>{record.subject}</TableCell>
+                        <TableCell>{getAssessmentTypeBadge(record.assessmentType)}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center space-x-2">
+                            <div className="flex-1 bg-gray-200 rounded-full h-2">
+                              <div 
+                                className={`h-2 rounded-full ${((record.score / record.maxScore) * 100) >= 90 ? 'bg-green-500' : ((record.score / record.maxScore) * 100) >= 75 ? 'bg-yellow-500' : 'bg-red-500'}`}
+                                style={{ width: `${(record.score / record.maxScore) * 100}%` }}
+                              />
+                            </div>
+                            <span className="text-sm font-medium">{record.score}/{record.maxScore}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline">{record.grade}</Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center space-x-1">
+                            <Calendar className="h-4 w-4 text-gray-400" />
+                            <span>{new Date(record.assessmentDate).toLocaleDateString()}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {record.remarks ? (
+                            <span className="text-sm text-gray-600">{record.remarks}</span>
+                          ) : (
+                            <span className="text-sm text-gray-400">No remarks</span>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
                 </TableBody>
               </Table>
             )}

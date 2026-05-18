@@ -43,6 +43,7 @@ import {
   Award,
   BookOpen,
   Target,
+  AlertCircle,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -213,8 +214,39 @@ export default function PerformancePage() {
       else if (percentage >= 70) grade = 'C'
       else if (percentage >= 60) grade = 'D'
 
-      // Mock API call
       const student = students.find(s => s.id === formData.studentId)
+      const record = {
+        studentId: formData.studentId,
+        classId: student?.classId || '',
+        subject: formData.subject,
+        assessmentType: formData.assessmentType,
+        score,
+        maxScore,
+        grade,
+        remarks: formData.remarks || undefined,
+        assessmentDate: formData.assessmentDate,
+      }
+
+      const studentName = student ? `${student.firstName} ${student.lastName}` : 'student'
+      const res = await fetch('/api/submissions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'PERFORMANCE',
+          title: `${formData.subject} - ${formData.assessmentType} - ${studentName}`,
+          content: `${formData.assessmentType} score ${score}/${maxScore} (${grade}) for ${studentName}`,
+          targetAudience: 'SPECIFIC_STUDENT',
+          targetId: formData.studentId,
+          data: { records: [record] },
+          submitNow: true,
+        }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || `Failed (${res.status})`)
+      }
+
+      // Optimistic local UI update.
       const newRecord: PerformanceRecord = {
         id: Date.now().toString(),
         studentId: formData.studentId,
@@ -231,7 +263,6 @@ export default function PerformancePage() {
         assessmentDate: formData.assessmentDate,
         recordedAt: new Date().toISOString(),
       }
-
       setPerformanceRecords(prev => [newRecord, ...prev])
       setIsAddPerformanceDialogOpen(false)
       setFormData({
@@ -243,9 +274,9 @@ export default function PerformancePage() {
         remarks: '',
         assessmentDate: new Date().toISOString().split('T')[0],
       })
-      toast.success('Performance record added successfully')
-    } catch (error) {
-      toast.error('Failed to add performance record')
+      toast.success('Performance submitted for approval')
+    } catch (error: any) {
+      toast.error(error?.message || 'Failed to submit performance')
     }
   }
 
@@ -369,24 +400,30 @@ export default function PerformancePage() {
         {/* Filters and Actions */}
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
-            <Select value={selectedClass} onValueChange={setSelectedClass}>
+            <Select
+              value={selectedClass || '__ALL__'}
+              onValueChange={(v) => setSelectedClass(v === '__ALL__' ? '' : v)}
+            >
               <SelectTrigger className="w-[200px]">
                 <SelectValue placeholder="Select class" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Classes</SelectItem>
+                <SelectItem value="__ALL__">All Classes</SelectItem>
                 {classes.map((cls) => (
                   <SelectItem key={cls.id} value={cls.id}>{cls.name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
             
-            <Select value={selectedSubject} onValueChange={setSelectedSubject}>
+            <Select
+              value={selectedSubject || '__ALL__'}
+              onValueChange={(v) => setSelectedSubject(v === '__ALL__' ? '' : v)}
+            >
               <SelectTrigger className="w-[200px]">
                 <SelectValue placeholder="Select subject" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Subjects</SelectItem>
+                <SelectItem value="__ALL__">All Subjects</SelectItem>
                 {subjects.map((subject) => (
                   <SelectItem key={subject} value={subject}>{subject}</SelectItem>
                 ))}

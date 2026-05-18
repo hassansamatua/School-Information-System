@@ -46,7 +46,6 @@ import {
   AlertCircle,
   TrendingUp,
   FileSpreadsheet,
-  FilePdf,
   UserCheck,
 } from 'lucide-react'
 import { toast } from 'sonner'

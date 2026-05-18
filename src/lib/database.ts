@@ -1,13 +1,48 @@
 import { PrismaClient } from '@prisma/client'
 
-const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined
+// Create a singleton Prisma client with error handling
+class Database {
+  private static instance: PrismaClient | null = null
+  private static isConnected: boolean = false
+
+  static getInstance(): PrismaClient {
+    if (!Database.instance) {
+      Database.instance = new PrismaClient({
+        log: ['error'],
+      })
+    }
+    return Database.instance
+  }
+
+  static async connect(): Promise<boolean> {
+    try {
+      const prisma = Database.getInstance()
+      await prisma.$connect()
+      Database.isConnected = true
+      return true
+    } catch (error) {
+      console.error('Database connection failed:', error)
+      Database.isConnected = false
+      return false
+    }
+  }
+
+  static async disconnect(): Promise<void> {
+    if (Database.instance) {
+      await Database.instance.$disconnect()
+      Database.instance = null
+      Database.isConnected = false
+    }
+  }
+
+  static isConnectionActive(): boolean {
+    return Database.isConnected
+  }
 }
 
-export const prisma =
-  globalForPrisma.prisma ??
-  new PrismaClient({
-    log: ['query'],
-  })
+// Export both the class and a prisma instance for backward compatibility
+export const prisma = new PrismaClient({
+  log: ['error'],
+})
 
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma
+export default Database

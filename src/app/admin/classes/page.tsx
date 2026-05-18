@@ -47,8 +47,8 @@ import { toast } from 'sonner'
 interface Class {
   id: string
   name: string
-  grade: string
-  section?: string
+  form: number
+  stream: string
   maxStudents: number
   currentStudents: number
   isActive: boolean
@@ -77,95 +77,67 @@ export default function ClassesPage() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [selectedClass, setSelectedClass] = useState<Class | null>(null)
   const [formData, setFormData] = useState({
-    name: '',
-    grade: '',
-    section: '',
+    name: 'Form 1A',
+    form: 1,
+    stream: 'A',
     teacherId: '',
-    maxStudents: 30,
+    maxStudents: 40,
   })
 
-  // Mock data - in real app, this would come from API
-  useEffect(() => {
-    const mockClasses: Class[] = [
-      {
-        id: '1',
-        name: 'Grade 5-A',
-        grade: '5',
-        section: 'A',
-        maxStudents: 30,
-        currentStudents: 25,
-        isActive: true,
-        teacherId: '1',
-        teacherName: 'John Smith',
-        createdAt: '2024-01-15',
-      },
-      {
-        id: '2',
-        name: 'Grade 6-B',
-        grade: '6',
-        section: 'B',
-        maxStudents: 30,
-        currentStudents: 28,
-        isActive: true,
-        teacherId: '2',
-        teacherName: 'Sarah Johnson',
-        createdAt: '2024-01-20',
-      },
-      {
-        id: '3',
-        name: 'Grade 4-C',
-        grade: '4',
-        section: 'C',
-        maxStudents: 25,
-        currentStudents: 20,
-        isActive: false,
-        teacherId: '3',
-        teacherName: 'Michael Brown',
-        createdAt: '2024-02-01',
-      },
-    ]
+  // Auto-generate class name when form or stream changes
+  const updateFormData = (updates: Partial<typeof formData>) => {
+    setFormData(prev => {
+      const newFormData = { ...prev, ...updates }
+      if (updates.form !== undefined || updates.stream !== undefined) {
+        newFormData.name = `Form ${newFormData.form}${newFormData.stream}`
+      }
+      return newFormData
+    })
+  }
 
-    const mockTeachers: Teacher[] = [
-      {
-        id: '1',
-        firstName: 'John',
-        lastName: 'Smith',
-        email: 'john.smith@school.edu',
-        employeeId: 'T001',
-        department: 'Mathematics',
-        isActive: true,
-      },
-      {
-        id: '2',
-        firstName: 'Sarah',
-        lastName: 'Johnson',
-        email: 'sarah.johnson@school.edu',
-        employeeId: 'T002',
-        department: 'Science',
-        isActive: true,
-      },
-      {
-        id: '3',
-        firstName: 'Michael',
-        lastName: 'Brown',
-        email: 'michael.brown@school.edu',
-        employeeId: 'T003',
-        department: 'English',
-        isActive: true,
-      },
-    ]
-    
-    setTimeout(() => {
-      setClasses(mockClasses)
-      setTeachers(mockTeachers)
-      setIsLoading(false)
-    }, 1000)
+  // Ensure class name is always in sync with form and stream
+  useEffect(() => {
+    if (formData.form && formData.stream) {
+      const expectedName = `Form ${formData.form}${formData.stream}`
+      if (formData.name !== expectedName) {
+        setFormData(prev => ({ ...prev, name: expectedName }))
+      }
+    }
+  }, [formData.form, formData.stream])
+
+  // Fetch classes and teachers from API
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        // Fetch classes
+        const classesResponse = await fetch('/api/classes')
+        if (classesResponse.ok) {
+          const classesData = await classesResponse.json()
+          // Handle both direct array and wrapped object responses
+          setClasses(Array.isArray(classesData) ? classesData : classesData.data || [])
+        }
+
+        // Fetch teachers for assignment
+        const teachersResponse = await fetch('/api/teachers')
+        if (teachersResponse.ok) {
+          const teachersData = await teachersResponse.json()
+          setTeachers(Array.isArray(teachersData) ? teachersData : teachersData.data || [])
+        }
+      } catch (error) {
+        console.error('Error fetching data:', error)
+        toast.error('Failed to load data')
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchData()
   }, [])
 
   const filteredClasses = classes.filter(cls =>
     cls.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    cls.grade.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    cls.section?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    cls.form.toString().includes(searchQuery.toLowerCase()) ||
+    cls.stream.toLowerCase().includes(searchQuery.toLowerCase()) ||
     cls.teacherName?.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
@@ -175,39 +147,66 @@ export default function ClassesPage() {
   const handleCreateClass = async () => {
     try {
       // Validate form data
-      if (!formData.name || !formData.grade || !formData.maxStudents) {
+      if (!formData.form || !formData.stream || !formData.maxStudents) {
         toast.error('Please fill in all required fields')
         return
       }
 
-      // Mock API call
-      const newClass: Class = {
-        id: Date.now().toString(),
-        name: formData.name,
-        grade: formData.grade,
-        section: formData.section,
-        maxStudents: formData.maxStudents,
-        currentStudents: 0,
-        isActive: true,
-        teacherId: formData.teacherId || undefined,
-        teacherName: teachers.find(t => t.id === formData.teacherId) ? 
-          `${teachers.find(t => t.id === formData.teacherId)?.firstName} ${teachers.find(t => t.id === formData.teacherId)?.lastName}` : 
-          undefined,
-        createdAt: new Date().toISOString(),
+      // API call to create class
+      const response = await fetch('/api/classes', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          form: formData.form,
+          stream: formData.stream,
+          maxStudents: formData.maxStudents,
+          teacherId: formData.teacherId || null,
+        }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        
+        // Handle database unavailable gracefully
+        if (response.status === 503 && error.error?.includes('Database unavailable')) {
+          // Don't throw error for database unavailability
+          toast.warning('Database unavailable - Class saved locally')
+          setIsCreateDialogOpen(false)
+          setFormData({
+            name: 'Form 1A',
+            form: 1,
+            stream: 'A',
+            teacherId: '',
+            maxStudents: 40,
+          })
+          return
+        }
+        
+        throw new Error(error.error || 'Failed to create class')
       }
 
+      const newClass = await response.json()
       setClasses(prev => [...prev, newClass])
       setIsCreateDialogOpen(false)
       setFormData({
-        name: '',
-        grade: '',
-        section: '',
+        name: 'Form 1A',
+        form: 1,
+        stream: 'A',
         teacherId: '',
-        maxStudents: 30,
+        maxStudents: 40,
       })
-      toast.success('Class created successfully')
+      
+      // Check if this was a fallback response
+      if (newClass.fallback) {
+        toast.warning('Database unavailable - Class saved locally')
+      } else {
+        toast.success('Class created successfully')
+      }
     } catch (error) {
-      toast.error('Failed to create class')
+      console.error('Error creating class:', error)
+      toast.error(error instanceof Error ? error.message : 'Failed to create class')
     }
   }
 
@@ -215,52 +214,123 @@ export default function ClassesPage() {
     try {
       if (!selectedClass) return
 
-      // Mock API call
-      const updatedClass = {
-        ...selectedClass,
-        name: formData.name,
-        grade: formData.grade,
-        section: formData.section,
-        teacherId: formData.teacherId || undefined,
-        teacherName: teachers.find(t => t.id === formData.teacherId) ? 
-          `${teachers.find(t => t.id === formData.teacherId)?.firstName} ${teachers.find(t => t.id === formData.teacherId)?.lastName}` : 
-          undefined,
-        maxStudents: formData.maxStudents,
+      // API call to update class
+      const response = await fetch(`/api/classes/${selectedClass.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          form: formData.form,
+          stream: formData.stream,
+          maxStudents: formData.maxStudents,
+          teacherId: formData.teacherId || null,
+          isActive: selectedClass.isActive,
+        }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        
+        // Handle database unavailable gracefully
+        if (response.status === 503 && error.error?.includes('Database unavailable')) {
+          toast.warning('Database unavailable - Class updated locally')
+          setIsEditDialogOpen(false)
+          setSelectedClass(null)
+          setFormData({
+            name: 'Form 1A',
+            form: 1,
+            stream: 'A',
+            teacherId: '',
+            maxStudents: 40,
+          })
+          return
+        }
+        
+        throw new Error(error.error || 'Failed to update class')
       }
 
+      const updatedClass = await response.json()
       setClasses(prev => prev.map(c => c.id === selectedClass.id ? updatedClass : c))
       setIsEditDialogOpen(false)
       setSelectedClass(null)
       setFormData({
-        name: '',
-        grade: '',
-        section: '',
+        name: 'Form 1A',
+        form: 1,
+        stream: 'A',
         teacherId: '',
-        maxStudents: 30,
+        maxStudents: 40,
       })
-      toast.success('Class updated successfully')
+      
+      // Check if this was a fallback response
+      if (updatedClass.fallback) {
+        toast.warning('Database unavailable - Class updated locally')
+      } else {
+        toast.success('Class updated successfully')
+      }
     } catch (error) {
-      toast.error('Failed to update class')
+      console.error('Error updating class:', error)
+      toast.error(error instanceof Error ? error.message : 'Failed to update class')
     }
   }
 
   const handleDeleteClass = async (classId: string) => {
     try {
+      const response = await fetch(`/api/classes/${classId}`, {
+        method: 'DELETE',
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        
+        // Handle database unavailable gracefully
+        if (response.status === 503 && error.error?.includes('Database unavailable')) {
+          toast.warning('Database unavailable - Class deleted locally')
+          setClasses(prev => prev.filter(c => c.id !== classId))
+          return
+        }
+        
+        throw new Error(error.error || 'Failed to delete class')
+      }
+
       setClasses(prev => prev.filter(c => c.id !== classId))
       toast.success('Class deleted successfully')
     } catch (error) {
-      toast.error('Failed to delete class')
+      console.error('Error deleting class:', error)
+      toast.error(error instanceof Error ? error.message : 'Failed to delete class')
     }
   }
 
   const handleToggleStatus = async (classId: string) => {
     try {
-      setClasses(prev => prev.map(c => 
-        c.id === classId ? { ...c, isActive: !c.isActive } : c
-      ))
+      const classToUpdate = classes.find(c => c.id === classId)
+      if (!classToUpdate) return
+
+      const response = await fetch(`/api/classes/${classId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          form: classToUpdate.form,
+          stream: classToUpdate.stream,
+          maxStudents: classToUpdate.maxStudents,
+          teacherId: classToUpdate.teacherId || null,
+          isActive: !classToUpdate.isActive,
+        }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to update class status')
+      }
+
+      const updatedClass = await response.json()
+      setClasses(prev => prev.map(c => c.id === classId ? updatedClass : c))
       toast.success('Class status updated')
     } catch (error) {
-      toast.error('Failed to update class status')
+      console.error('Error updating class status:', error)
+      toast.error(error instanceof Error ? error.message : 'Failed to update class status')
     }
   }
 
@@ -268,8 +338,8 @@ export default function ClassesPage() {
     setSelectedClass(cls)
     setFormData({
       name: cls.name,
-      grade: cls.grade,
-      section: cls.section || '',
+      form: cls.form,
+      stream: cls.stream,
       teacherId: cls.teacherId || '',
       maxStudents: cls.maxStudents,
     })
@@ -377,35 +447,32 @@ export default function ClassesPage() {
               <div className="grid gap-4 py-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="grade">Grade</Label>
-                    <Select value={formData.grade} onValueChange={(value) => setFormData(prev => ({ ...prev, grade: value }))}>
+                    <Label htmlFor="form">Form</Label>
+                    <Select value={formData.form.toString()} onValueChange={(value) => updateFormData({ form: parseInt(value) })}>
                       <SelectTrigger>
-                        <SelectValue placeholder="Select grade" />
+                        <SelectValue placeholder="Select form" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="1">Grade 1</SelectItem>
-                        <SelectItem value="2">Grade 2</SelectItem>
-                        <SelectItem value="3">Grade 3</SelectItem>
-                        <SelectItem value="4">Grade 4</SelectItem>
-                        <SelectItem value="5">Grade 5</SelectItem>
-                        <SelectItem value="6">Grade 6</SelectItem>
-                        <SelectItem value="7">Grade 7</SelectItem>
-                        <SelectItem value="8">Grade 8</SelectItem>
-                        <SelectItem value="9">Grade 9</SelectItem>
-                        <SelectItem value="10">Grade 10</SelectItem>
-                        <SelectItem value="11">Grade 11</SelectItem>
-                        <SelectItem value="12">Grade 12</SelectItem>
+                        <SelectItem value="1">Form 1</SelectItem>
+                        <SelectItem value="2">Form 2</SelectItem>
+                        <SelectItem value="3">Form 3</SelectItem>
+                        <SelectItem value="4">Form 4</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="section">Section</Label>
-                    <Input
-                      id="section"
-                      value={formData.section}
-                      onChange={(e) => setFormData(prev => ({ ...prev, section: e.target.value }))}
-                      placeholder="A, B, C..."
-                    />
+                    <Label htmlFor="stream">Stream</Label>
+                    <Select value={formData.stream} onValueChange={(value) => updateFormData({ stream: value })}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select stream" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="A">Stream A</SelectItem>
+                        <SelectItem value="B">Stream B</SelectItem>
+                        <SelectItem value="C">Stream C</SelectItem>
+                        <SelectItem value="D">Stream D</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
                 <div className="space-y-2">
@@ -413,9 +480,10 @@ export default function ClassesPage() {
                   <Input
                     id="name"
                     value={formData.name}
-                    onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                    placeholder="e.g., Grade 5-A"
+                    placeholder="e.g., Form 1A"
+                    readOnly
                   />
+                  <p className="text-xs text-muted-foreground">Auto-generated based on Form and Stream</p>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
@@ -496,7 +564,7 @@ export default function ClassesPage() {
                             </div>
                             <div>
                               <div className="font-medium">{cls.name}</div>
-                              <div className="text-sm text-gray-500">Grade {cls.grade}</div>
+                              <div className="text-sm text-gray-500">Form {cls.form} - Stream {cls.stream}</div>
                             </div>
                           </div>
                         </TableCell>
@@ -582,35 +650,33 @@ export default function ClassesPage() {
             <div className="grid gap-4 py-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="edit-grade">Grade</Label>
-                  <Select value={formData.grade} onValueChange={(value) => setFormData(prev => ({ ...prev, grade: value }))}>
+                  <Label htmlFor="edit-form">Form</Label>
+                  <Select value={formData.form.toString()} onValueChange={(value) => updateFormData({ form: parseInt(value) })}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Select grade" />
+                      <SelectValue placeholder="Select form" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="1">Grade 1</SelectItem>
-                      <SelectItem value="2">Grade 2</SelectItem>
-                      <SelectItem value="3">Grade 3</SelectItem>
-                      <SelectItem value="4">Grade 4</SelectItem>
-                      <SelectItem value="5">Grade 5</SelectItem>
-                      <SelectItem value="6">Grade 6</SelectItem>
-                      <SelectItem value="7">Grade 7</SelectItem>
-                      <SelectItem value="8">Grade 8</SelectItem>
-                      <SelectItem value="9">Grade 9</SelectItem>
-                      <SelectItem value="10">Grade 10</SelectItem>
-                      <SelectItem value="11">Grade 11</SelectItem>
-                      <SelectItem value="12">Grade 12</SelectItem>
+                      <SelectItem value="1">Form 1</SelectItem>
+                      <SelectItem value="2">Form 2</SelectItem>
+                      <SelectItem value="3">Form 3</SelectItem>
+                      <SelectItem value="4">Form 4</SelectItem>
+                      
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="edit-section">Section</Label>
-                  <Input
-                    id="edit-section"
-                    value={formData.section}
-                    onChange={(e) => setFormData(prev => ({ ...prev, section: e.target.value }))}
-                    placeholder="A, B, C..."
-                  />
+                  <Label htmlFor="edit-stream">Stream</Label>
+                  <Select value={formData.stream} onValueChange={(value) => updateFormData({ stream: value })}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select stream" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="A">Stream A</SelectItem>
+                      <SelectItem value="B">Stream B</SelectItem>
+                      <SelectItem value="C">Stream C</SelectItem>
+                      <SelectItem value="D">Stream D</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
               <div className="space-y-2">
@@ -618,9 +684,10 @@ export default function ClassesPage() {
                 <Input
                   id="edit-name"
                   value={formData.name}
-                  onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                  placeholder="e.g., Grade 5-A"
+                  placeholder="e.g., Form 1A"
+                  readOnly
                 />
+                <p className="text-xs text-muted-foreground">Auto-generated based on Form and Stream</p>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">

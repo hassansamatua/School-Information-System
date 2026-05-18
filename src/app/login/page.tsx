@@ -42,7 +42,12 @@ export default function LoginPage() {
         } else if (session?.user?.role === 'TEACHER') {
           router.push('/teacher')
         } else if (session?.user?.role === 'PARENT') {
-          router.push('/parent')
+          // Check if parent is pending approval
+          if (session.user.isPendingParent) {
+            router.push('/pending-approval')
+          } else {
+            router.push('/parent')
+          }
         } else {
           router.push('/dashboard')
         }

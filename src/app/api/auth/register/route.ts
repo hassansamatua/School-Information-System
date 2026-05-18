@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createUser, getUserByEmail } from '@/lib/auth'
-import { prisma } from '@/lib/database'
+import { v4 as uuid } from 'uuid'
+import bcrypt from 'bcryptjs'
+import { executeQuery, executeTransaction } from '@/lib/mysql'
 import { registerSchema } from '@/lib/validations'
 
 export async function POST(request: NextRequest) {
@@ -11,8 +12,11 @@ export async function POST(request: NextRequest) {
     const { firstName, lastName, email, password, phone, studentRegistrationNumber } = validatedData
 
     // Check if user already exists
-    const existingUser = await getUserByEmail(email)
-    if (existingUser) {
+    const existingUsers = await executeQuery<{ id: string }>(
+      'SELECT id FROM users WHERE email = ? LIMIT 1',
+      [email]
+    )
+    if (existingUsers.length > 0) {
       return NextResponse.json(
         { error: 'User with this email already exists' },
         { status: 400 }
@@ -20,10 +24,14 @@ export async function POST(request: NextRequest) {
     }
 
     // Find student by registration number
-    const student = await prisma.student.findUnique({
-      where: { registrationNumber: studentRegistrationNumber },
-      include: { parent: true }
-    })
+    const students = await executeQuery<{
+      id: string
+      parentId: string | null
+    }>(
+      'SELECT id, parentId FROM students WHERE registrationNumber = ? LIMIT 1',
+      [studentRegistrationNumber]
+    )
+    const student = students[0]
 
     if (!student) {
       return NextResponse.json(
@@ -33,46 +41,45 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if student already has a parent account
-    if (student.parent) {
+    if (student.parentId) {
       return NextResponse.json(
         { error: 'This student already has a parent account' },
         { status: 400 }
       )
     }
 
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 12)
+
     // Create user and parent in a transaction
-    const result = await prisma.$transaction(async (tx) => {
-      // Create user
-      const user = await createUser(email, password, 'PARENT')
+    const userId = uuid()
+    const parentId = uuid()
 
-      // Create parent
-      const parent = await tx.parent.create({
-        data: {
-          userId: user.id,
-          firstName,
-          lastName,
-          phone,
-          isApproved: false, // Requires admin approval
-        }
-      })
-
-      // Link parent to student
-      await tx.student.update({
-        where: { id: student.id },
-        data: { parentId: parent.id }
-      })
-
-      return { user, parent }
-    })
+    await executeTransaction([
+      {
+        query: `INSERT INTO users (id, email, password, role, isActive)
+                VALUES (?, ?, ?, 'PARENT', 1)`,
+        params: [userId, email, hashedPassword],
+      },
+      {
+        query: `INSERT INTO parents (id, userId, firstName, lastName, phone, isApproved)
+                VALUES (?, ?, ?, ?, ?, 0)`,
+        params: [parentId, userId, firstName, lastName, phone || null],
+      },
+      {
+        query: `UPDATE students SET parentId = ? WHERE id = ?`,
+        params: [parentId, student.id],
+      },
+    ])
 
     return NextResponse.json({
       success: true,
       message: 'Registration successful. Your account is pending approval.',
       user: {
-        id: result.user.id,
-        email: result.user.email,
-        role: result.user.role,
-        name: `${result.parent.firstName} ${result.parent.lastName}`,
+        id: userId,
+        email,
+        role: 'PARENT',
+        name: `${firstName} ${lastName}`,
       }
     })
   } catch (error) {

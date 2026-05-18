@@ -18,6 +18,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
@@ -49,15 +50,17 @@ interface Student {
   address?: string
   phone?: string
   email?: string
-  classId: string
-  className: string
+  classId: string | null
+  className: string | null
+  parentId: string | null
   isActive: boolean
   enrollmentDate: string
-  photo?: string
+  createdAt: string
 }
 
 interface AttendanceRecord {
   id: string
+  studentId: string
   date: string
   status: 'PRESENT' | 'ABSENT' | 'LATE' | 'EXCUSED'
   remarks?: string
@@ -65,6 +68,7 @@ interface AttendanceRecord {
 
 interface PerformanceRecord {
   id: string
+  studentId: string
   subject: string
   assessmentType: string
   score: number
@@ -77,6 +81,7 @@ interface PerformanceRecord {
 
 interface Result {
   id: string
+  studentId: string
   examType: string
   term: string
   academicYear: string
@@ -95,53 +100,68 @@ export default function StudentsPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null)
   const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false)
+  const [attendance, setAttendance] = useState<AttendanceRecord[]>([])
+  const [performance, setPerformance] = useState<PerformanceRecord[]>([])
+  const [results, setResults] = useState<Result[]>([])
 
-  // Mock data - in real app, this would come from API
-  useEffect(() => {
-    const mockStudents: Student[] = [
-      {
-        id: '1',
-        registrationNumber: 'REG2024001',
-        firstName: 'Alice',
-        lastName: 'Johnson',
-        dateOfBirth: '2010-05-15',
-        gender: 'FEMALE',
-        address: '123 Main St, City',
-        phone: '+1234567890',
-        email: 'alice.johnson@email.com',
-        classId: '1',
-        className: 'Grade 5-A',
-        isActive: true,
-        enrollmentDate: '2024-01-15',
-      },
-      {
-        id: '2',
-        registrationNumber: 'REG2024002',
-        firstName: 'Bob',
-        lastName: 'Johnson',
-        dateOfBirth: '2011-08-20',
-        gender: 'MALE',
-        address: '123 Main St, City',
-        phone: '+1234567891',
-        email: 'bob.johnson@email.com',
-        classId: '2',
-        className: 'Grade 4-B',
-        isActive: true,
-        enrollmentDate: '2024-01-20',
-      },
-    ]
+  const loadData = async () => {
+    try {
+      // Fetch parent's children
+      const parentsRes = await fetch('/api/parents')
+      if (!parentsRes.ok) throw new Error('Failed to load parent data')
+      const parentsData = await parentsRes.json()
+      const parentData = parentsData.find((p: any) => p.email === user?.email)
+      
+      if (!parentData) {
+        throw new Error('Parent data not found')
+      }
 
-    setTimeout(() => {
-      setStudents(mockStudents)
+      // Fetch students
+      const studentsRes = await fetch('/api/students')
+      if (!studentsRes.ok) throw new Error('Failed to load students')
+      const allStudents = await studentsRes.json()
+      const parentChildren = allStudents.filter((s: any) => s.parentId === parentData.id)
+      setStudents(parentChildren)
+
+      // Fetch attendance for children
+      if (parentChildren.length > 0) {
+        const attendancePromises = parentChildren.map((child: Student) =>
+          fetch(`/api/attendance?studentId=${child.id}`).then(res => res.json())
+        )
+        const attendanceData = await Promise.all(attendancePromises)
+        setAttendance(attendanceData.flat())
+
+        // Fetch performance for children
+        const performancePromises = parentChildren.map((child: Student) =>
+          fetch(`/api/performance?studentId=${child.id}`).then(res => res.json())
+        )
+        const performanceData = await Promise.all(performancePromises)
+        setPerformance(performanceData.flat())
+
+        // Fetch results for children
+        const resultsPromises = parentChildren.map((child: Student) =>
+          fetch(`/api/results?studentId=${child.id}`).then(res => res.json())
+        )
+        const resultsData = await Promise.all(resultsPromises)
+        setResults(resultsData.flat())
+      }
+    } catch (error: any) {
+      console.error('Error loading students data:', error)
+    } finally {
       setIsLoading(false)
-    }, 1000)
-  }, [])
+    }
+  }
+
+  useEffect(() => {
+    if (!isAuthorized || !user) return
+    loadData()
+  }, [isAuthorized, user])
 
   const filteredStudents = students.filter(student =>
     student.firstName.toLowerCase().includes(searchQuery.toLowerCase()) ||
     student.lastName.toLowerCase().includes(searchQuery.toLowerCase()) ||
     student.registrationNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    student.className.toLowerCase().includes(searchQuery.toLowerCase())
+    (student.className || '').toLowerCase().includes(searchQuery.toLowerCase())
   )
 
   const openDetailsDialog = (student: Student) => {
@@ -162,31 +182,16 @@ export default function StudentsPage() {
   }
 
   const getStudentStats = (studentId: string) => {
-    // Mock data for student stats
-    const attendanceRecords: AttendanceRecord[] = [
-      { id: '1', date: '2024-03-15', status: 'PRESENT' },
-      { id: '2', date: '2024-03-14', status: 'PRESENT' },
-      { id: '3', date: '2024-03-13', status: 'LATE', remarks: 'Traffic delay' },
-      { id: '4', date: '2024-03-12', status: 'PRESENT' },
-      { id: '5', date: '2024-03-11', status: 'PRESENT' },
-    ]
+    const studentAttendance = attendance.filter(a => a.studentId === studentId)
+    const studentPerformance = performance.filter(p => p.studentId === studentId)
+    const studentResults = results.filter(r => r.studentId === studentId)
 
-    const performanceRecords: PerformanceRecord[] = [
-      { id: '1', subject: 'Mathematics', assessmentType: 'Test', score: 85, maxScore: 100, grade: 'B', percentage: 85, assessmentDate: '2024-03-10' },
-      { id: '2', subject: 'Science', assessmentType: 'Quiz', score: 92, maxScore: 100, grade: 'A', percentage: 92, assessmentDate: '2024-03-08' },
-      { id: '3', subject: 'English', assessmentType: 'Assignment', score: 88, maxScore: 100, grade: 'B', percentage: 88, assessmentDate: '2024-03-05' },
-    ]
-
-    const results: Result[] = [
-      { id: '1', examType: 'Midterm', term: 'Term 2', academicYear: '2023-2024', totalMarks: 450, maxTotalMarks: 500, percentage: 90, grade: 'A', rank: 5, publishedAt: '2024-03-10' },
-    ]
-
-    const totalAttendance = attendanceRecords.length
-    const presentDays = attendanceRecords.filter(r => r.status === 'PRESENT').length
+    const totalAttendance = studentAttendance.length
+    const presentDays = studentAttendance.filter(r => r.status === 'PRESENT').length
     const attendanceRate = totalAttendance > 0 ? (presentDays / totalAttendance) * 100 : 0
 
-    const averageScore = performanceRecords.length > 0 
-      ? performanceRecords.reduce((sum, r) => sum + r.percentage, 0) / performanceRecords.length 
+    const averageScore = studentPerformance.length > 0 
+      ? studentPerformance.reduce((sum, r) => sum + ((r.score / r.maxScore) * 100), 0) / studentPerformance.length 
       : 0
 
     return {
@@ -194,8 +199,8 @@ export default function StudentsPage() {
       averageScore,
       totalAttendance,
       presentDays,
-      performanceRecords,
-      results,
+      performanceRecords: studentPerformance,
+      results: studentResults,
     }
   }
 

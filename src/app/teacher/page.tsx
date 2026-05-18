@@ -37,10 +37,10 @@ export default function TeacherDashboard() {
   }
 
   const recentActivity = [
-    { id: 1, type: 'attendance', description: 'Recorded attendance for Grade 5-A', time: '2 hours ago' },
+    { id: 1, type: 'attendance', description: 'Recorded attendance for Form 1A', time: '2 hours ago' },
     { id: 2, type: 'performance', description: 'Added performance scores for Math test', time: '3 hours ago' },
     { id: 3, type: 'submission', description: 'Submitted announcement: Science Fair', time: '5 hours ago' },
-    { id: 4, type: 'attendance', description: 'Recorded attendance for Grade 6-B', time: '1 day ago' },
+    { id: 4, type: 'attendance', description: 'Recorded attendance for Form 2B', time: '1 day ago' },
     { id: 5, type: 'performance', description: 'Updated performance records', time: '2 days ago' },
   ]
 
@@ -235,8 +235,8 @@ export default function TeacherDashboard() {
                   <div className="flex items-center space-x-3">
                     <BookOpen className="h-5 w-5 text-blue-500" />
                     <div>
-                      <h4 className="font-medium">Grade 5-A</h4>
-                      <p className="text-sm text-gray-500">25 students</p>
+                      <h4 className="font-medium">Form 1A</h4>
+                      <p className="text-sm text-gray-500">35 students</p>
                     </div>
                   </div>
                   <Badge variant="outline">Active</Badge>
@@ -245,8 +245,8 @@ export default function TeacherDashboard() {
                   <div className="flex items-center space-x-3">
                     <BookOpen className="h-5 w-5 text-green-500" />
                     <div>
-                      <h4 className="font-medium">Grade 6-B</h4>
-                      <p className="text-sm text-gray-500">30 students</p>
+                      <h4 className="font-medium">Form 2B</h4>
+                      <p className="text-sm text-gray-500">38 students</p>
                     </div>
                   </div>
                   <Badge variant="outline">Active</Badge>
@@ -255,8 +255,8 @@ export default function TeacherDashboard() {
                   <div className="flex items-center space-x-3">
                     <BookOpen className="h-5 w-5 text-purple-500" />
                     <div>
-                      <h4 className="font-medium">Grade 4-C</h4>
-                      <p className="text-sm text-gray-500">30 students</p>
+                      <h4 className="font-medium">Form 3C</h4>
+                      <p className="text-sm text-gray-500">32 students</p>
                     </div>
                   </div>
                   <Badge variant="outline">Active</Badge>

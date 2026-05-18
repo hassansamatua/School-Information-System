@@ -4,6 +4,7 @@ import './globals.css'
 import { ThemeProvider } from '@/context/theme-context'
 import { AuthProvider } from '@/components/auth/auth-provider'
 import { Toaster } from '@/components/ui/toaster'
+import { Toaster as SonnerToaster } from 'sonner'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -24,6 +25,7 @@ export default function RootLayout({
           <AuthProvider>
             {children}
             <Toaster />
+            <SonnerToaster />
           </AuthProvider>
         </ThemeProvider>
       </body>

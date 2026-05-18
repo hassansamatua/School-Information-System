@@ -67,8 +67,8 @@ interface Student {
 interface Class {
   id: string
   name: string
-  grade: string
-  section?: string
+  form: number
+  stream: string
 }
 
 export default function StudentsPage() {
@@ -108,7 +108,7 @@ export default function StudentsPage() {
         address: '123 Main St, City',
         isActive: true,
         classId: '1',
-        className: 'Grade 5-A',
+        className: 'Form 1A',
         parentName: 'Mary Johnson',
         createdAt: '2024-01-15',
       },
@@ -124,7 +124,7 @@ export default function StudentsPage() {
         address: '456 Oak Ave, City',
         isActive: true,
         classId: '2',
-        className: 'Grade 6-B',
+        className: 'Form 2B',
         parentName: 'David Smith',
         createdAt: '2024-01-20',
       },
@@ -140,23 +140,69 @@ export default function StudentsPage() {
         address: '789 Pine Rd, City',
         isActive: false,
         classId: '1',
-        className: 'Grade 5-A',
+        className: 'Form 1A',
         parentName: 'Lisa Brown',
         createdAt: '2024-02-01',
       },
+      {
+        id: '4',
+        registrationNumber: 'REG2024004',
+        firstName: 'David',
+        lastName: 'Wilson',
+        email: 'david.wilson@email.com',
+        phone: '+1234567893',
+        dateOfBirth: '2008-08-22',
+        gender: 'MALE',
+        address: '456 Oak Ave, City',
+        isActive: true,
+        classId: '7',
+        className: 'Form 4A',
+        parentName: 'Robert Wilson',
+        createdAt: '2024-01-20',
+      },
+      {
+        id: '5',
+        registrationNumber: 'REG2024005',
+        firstName: 'Emma',
+        lastName: 'Davis',
+        email: 'emma.davis@email.com',
+        phone: '+1234567894',
+        dateOfBirth: '2008-12-05',
+        gender: 'FEMALE',
+        address: '321 Elm St, City',
+        isActive: true,
+        classId: '8',
+        className: 'Form 4B',
+        parentName: 'Jennifer Davis',
+        createdAt: '2024-02-10',
+      },
     ]
 
-    const mockClasses: Class[] = [
-      { id: '1', name: 'Grade 5-A', grade: '5', section: 'A' },
-      { id: '2', name: 'Grade 6-B', grade: '6', section: 'B' },
-      { id: '3', name: 'Grade 4-C', grade: '4', section: 'C' },
-    ]
-    
-    setTimeout(() => {
-      setStudents(mockStudents)
-      setClasses(mockClasses)
-      setIsLoading(false)
-    }, 1000)
+    // Fetch students and classes from API
+    const fetchData = async () => {
+      try {
+        // Fetch students
+        const studentsResponse = await fetch('/api/students')
+        if (studentsResponse.ok) {
+          const studentsData = await studentsResponse.json()
+          setStudents(Array.isArray(studentsData) ? studentsData : studentsData.data || [])
+        }
+
+        // Fetch classes for student assignment
+        const classesResponse = await fetch('/api/classes')
+        if (classesResponse.ok) {
+          const classesData = await classesResponse.json()
+          setClasses(Array.isArray(classesData) ? classesData : classesData.data || [])
+        }
+      } catch (error) {
+        console.error('Error fetching data:', error)
+        toast.error('Failed to load data')
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchData()
   }, [])
 
   const filteredStudents = students.filter(student =>
@@ -177,23 +223,32 @@ export default function StudentsPage() {
         return
       }
 
-      // Mock API call
-      const newStudent: Student = {
-        id: Date.now().toString(),
-        registrationNumber: formData.registrationNumber,
-        firstName: formData.firstName,
-        lastName: formData.lastName,
-        email: formData.email,
-        phone: formData.phone,
-        dateOfBirth: formData.dateOfBirth,
-        gender: formData.gender as 'MALE' | 'FEMALE',
-        address: formData.address,
-        isActive: true,
-        classId: formData.classId || undefined,
-        className: classes.find(c => c.id === formData.classId)?.name,
-        createdAt: new Date().toISOString(),
+      // API call to create student
+      const response = await fetch('/api/students', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          registrationNumber: formData.registrationNumber,
+          firstName: formData.firstName,
+          lastName: formData.lastName,
+          email: formData.email || null,
+          phone: formData.phone || null,
+          dateOfBirth: formData.dateOfBirth,
+          gender: formData.gender,
+          address: formData.address || null,
+          classId: formData.classId || null,
+          parentId: formData.parentId || null,
+        }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to create student')
       }
 
+      const newStudent = await response.json()
       setStudents(prev => [...prev, newStudent])
       setIsCreateDialogOpen(false)
       setFormData({
@@ -210,7 +265,8 @@ export default function StudentsPage() {
       })
       toast.success('Student created successfully')
     } catch (error) {
-      toast.error('Failed to create student')
+      console.error('Error creating student:', error)
+      toast.error(error instanceof Error ? error.message : 'Failed to create student')
     }
   }
 

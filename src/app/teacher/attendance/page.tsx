@@ -71,8 +71,8 @@ interface AttendanceRecord {
 interface Class {
   id: string
   name: string
-  grade: string
-  section: string
+  form: number
+  stream: string
   studentCount: number
 }
 
@@ -99,8 +99,8 @@ export default function AttendancePage() {
     ]
 
     const mockClasses: Class[] = [
-      { id: '1', name: 'Grade 5-A', grade: '5', section: 'A', studentCount: 3 },
-      { id: '2', name: 'Grade 6-B', grade: '6', section: 'B', studentCount: 2 },
+      { id: '1', name: 'Form 1A', form: 1, stream: 'A', studentCount: 3 },
+      { id: '2', name: 'Form 2B', form: 2, stream: 'B', studentCount: 2 },
     ]
 
     const mockAttendanceRecords: AttendanceRecord[] = [
@@ -110,7 +110,7 @@ export default function AttendancePage() {
         studentName: 'Alice Johnson',
         registrationNumber: 'REG2024001',
         classId: '1',
-        className: 'Grade 5-A',
+        className: 'Form 1A',
         date: '2024-03-15',
         status: 'PRESENT',
         recordedAt: '2024-03-15T08:30:00Z',
@@ -121,7 +121,7 @@ export default function AttendancePage() {
         studentName: 'Bob Smith',
         registrationNumber: 'REG2024002',
         classId: '1',
-        className: 'Grade 5-A',
+        className: 'Form 1A',
         date: '2024-03-15',
         status: 'ABSENT',
         remarks: 'Sick leave',
@@ -133,7 +133,7 @@ export default function AttendancePage() {
         studentName: 'Charlie Brown',
         registrationNumber: 'REG2024003',
         classId: '1',
-        className: 'Grade 5-A',
+        className: 'Form 1A',
         date: '2024-03-15',
         status: 'LATE',
         remarks: 'Arrived 15 minutes late',
@@ -170,7 +170,38 @@ export default function AttendancePage() {
         return
       }
 
-      // Mock API call
+      const records = filteredStudents.map((student) => {
+        const data = attendanceData[student.id] || { status: 'PRESENT', remarks: '' }
+        return {
+          studentId: student.id,
+          classId: student.classId,
+          date: selectedDate,
+          status: data.status,
+          remarks: data.remarks || undefined,
+        }
+      })
+
+      const className = classes.find((c) => c.id === selectedClass)?.name || 'class'
+
+      const res = await fetch('/api/submissions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'ATTENDANCE',
+          title: `Attendance - ${className} - ${selectedDate}`,
+          content: `Attendance for ${records.length} student(s) on ${selectedDate}`,
+          targetAudience: 'SPECIFIC_CLASS',
+          targetId: selectedClass,
+          data: { records },
+          submitNow: true,
+        }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || `Failed (${res.status})`)
+      }
+
+      // Optimistic local UI update so the teacher sees the entries.
       const newRecords: AttendanceRecord[] = filteredStudents.map((student, index) => {
         const data = attendanceData[student.id] || { status: 'PRESENT', remarks: '' }
         return {
@@ -186,17 +217,16 @@ export default function AttendancePage() {
           recordedAt: new Date().toISOString(),
         }
       })
-
-      setAttendanceRecords(prev => {
-        const filtered = prev.filter(r => !(r.date === selectedDate && r.classId === selectedClass))
+      setAttendanceRecords((prev) => {
+        const filtered = prev.filter((r) => !(r.date === selectedDate && r.classId === selectedClass))
         return [...filtered, ...newRecords]
       })
 
       setIsMarkAttendanceDialogOpen(false)
       setAttendanceData({})
-      toast.success('Attendance marked successfully')
-    } catch (error) {
-      toast.error('Failed to mark attendance')
+      toast.success('Attendance submitted for approval')
+    } catch (error: any) {
+      toast.error(error?.message || 'Failed to submit attendance')
     }
   }
 
@@ -302,12 +332,15 @@ export default function AttendancePage() {
         {/* Filters and Actions */}
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
-            <Select value={selectedClass} onValueChange={setSelectedClass}>
+            <Select
+              value={selectedClass || '__ALL__'}
+              onValueChange={(v) => setSelectedClass(v === '__ALL__' ? '' : v)}
+            >
               <SelectTrigger className="w-[200px]">
                 <SelectValue placeholder="Select class" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Classes</SelectItem>
+                <SelectItem value="__ALL__">All Classes</SelectItem>
                 {classes.map((cls) => (
                   <SelectItem key={cls.id} value={cls.id}>{cls.name}</SelectItem>
                 ))}

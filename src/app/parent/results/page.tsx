@@ -25,6 +25,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
@@ -40,6 +41,7 @@ import {
   FileText,
   Target,
   Users,
+  AlertCircle,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -48,33 +50,22 @@ interface Student {
   registrationNumber: string
   firstName: string
   lastName: string
-  classId: string
-  className: string
+  classId: string | null
+  className: string | null
+  parentId: string | null
 }
 
 interface Result {
   id: string
   studentId: string
-  studentName: string
-  registrationNumber: string
-  classId: string
-  className: string
   examType: 'MIDTERM' | 'FINAL' | 'UNIT_TEST' | 'PRACTICAL'
   term: string
   academicYear: string
-  subjects: Array<{
-    subject: string
-    marks: number
-    maxMarks: number
-    grade: string
-    remarks?: string
-  }>
   totalMarks: number
   maxTotalMarks: number
   percentage: number
   grade: string
   rank?: number
-  remarks?: string
   publishedAt: string
 }
 
@@ -91,122 +82,45 @@ export default function ResultsPage() {
   const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false)
   const [selectedResult, setSelectedResult] = useState<Result | null>(null)
 
-  // Mock data - in real app, this would come from API
-  useEffect(() => {
-    const mockStudents: Student[] = [
-      { id: '1', registrationNumber: 'REG2024001', firstName: 'Alice', lastName: 'Johnson', classId: '1', className: 'Grade 5-A' },
-      { id: '2', registrationNumber: 'REG2024002', firstName: 'Bob', lastName: 'Johnson', classId: '2', className: 'Grade 4-B' },
-    ]
+  const loadData = async () => {
+    try {
+      // Fetch parent's children
+      const parentsRes = await fetch('/api/parents')
+      if (!parentsRes.ok) throw new Error('Failed to load parent data')
+      const parentsData = await parentsRes.json()
+      const parentData = parentsData.find((p: any) => p.email === user?.email)
+      
+      if (!parentData) {
+        throw new Error('Parent data not found')
+      }
 
-    const mockResults: Result[] = [
-      {
-        id: '1',
-        studentId: '1',
-        studentName: 'Alice Johnson',
-        registrationNumber: 'REG2024001',
-        classId: '1',
-        className: 'Grade 5-A',
-        examType: 'MIDTERM',
-        term: 'Term 2',
-        academicYear: '2023-2024',
-        subjects: [
-          { subject: 'Mathematics', marks: 85, maxMarks: 100, grade: 'B', remarks: 'Good problem solving skills' },
-          { subject: 'Science', marks: 92, maxMarks: 100, grade: 'A', remarks: 'Excellent understanding' },
-          { subject: 'English', marks: 88, maxMarks: 100, grade: 'B', remarks: 'Well written responses' },
-          { subject: 'History', marks: 90, maxMarks: 100, grade: 'A', remarks: 'Strong analytical skills' },
-          { subject: 'Geography', marks: 87, maxMarks: 100, grade: 'B', remarks: 'Good map reading skills' },
-        ],
-        totalMarks: 442,
-        maxTotalMarks: 500,
-        percentage: 88.4,
-        grade: 'B',
-        rank: 5,
-        remarks: 'Consistent performance across all subjects',
-        publishedAt: '2024-03-10T09:00:00Z',
-      },
-      {
-        id: '2',
-        studentId: '1',
-        studentName: 'Alice Johnson',
-        registrationNumber: 'REG2024001',
-        classId: '1',
-        className: 'Grade 5-A',
-        examType: 'FINAL',
-        term: 'Term 2',
-        academicYear: '2023-2024',
-        subjects: [
-          { subject: 'Mathematics', marks: 90, maxMarks: 100, grade: 'A', remarks: 'Excellent improvement' },
-          { subject: 'Science', marks: 94, maxMarks: 100, grade: 'A', remarks: 'Outstanding performance' },
-          { subject: 'English', marks: 91, maxMarks: 100, grade: 'A', remarks: 'Very good writing' },
-          { subject: 'History', marks: 89, maxMarks: 100, grade: 'B', remarks: 'Good understanding' },
-          { subject: 'Geography', marks: 93, maxMarks: 100, grade: 'A', remarks: 'Excellent knowledge' },
-        ],
-        totalMarks: 457,
-        maxTotalMarks: 500,
-        percentage: 91.4,
-        grade: 'A',
-        rank: 3,
-        remarks: 'Significant improvement from midterm',
-        publishedAt: '2024-03-20T14:00:00Z',
-      },
-      {
-        id: '3',
-        studentId: '2',
-        studentName: 'Bob Johnson',
-        registrationNumber: 'REG2024002',
-        classId: '2',
-        className: 'Grade 4-B',
-        examType: 'MIDTERM',
-        term: 'Term 2',
-        academicYear: '2023-2024',
-        subjects: [
-          { subject: 'Mathematics', marks: 78, maxMarks: 100, grade: 'C', remarks: 'Needs more practice' },
-          { subject: 'Science', marks: 85, maxMarks: 100, grade: 'B', remarks: 'Good understanding' },
-          { subject: 'English', marks: 82, maxMarks: 100, grade: 'B', remarks: 'Fair performance' },
-          { subject: 'History', marks: 80, maxMarks: 100, grade: 'B', remarks: 'Average performance' },
-          { subject: 'Geography', marks: 83, maxMarks: 100, grade: 'B', remarks: 'Satisfactory work' },
-        ],
-        totalMarks: 408,
-        maxTotalMarks: 500,
-        percentage: 81.6,
-        grade: 'B',
-        rank: 12,
-        remarks: 'Needs improvement in mathematics',
-        publishedAt: '2024-03-10T09:00:00Z',
-      },
-      {
-        id: '4',
-        studentId: '2',
-        studentName: 'Bob Johnson',
-        registrationNumber: 'REG2024002',
-        classId: '2',
-        className: 'Grade 4-B',
-        examType: 'FINAL',
-        term: 'Term 2',
-        academicYear: '2023-2024',
-        subjects: [
-          { subject: 'Mathematics', marks: 82, maxMarks: 100, grade: 'B', remarks: 'Good improvement' },
-          { subject: 'Science', marks: 88, maxMarks: 100, grade: 'B', remarks: 'Better performance' },
-          { subject: 'English', marks: 85, maxMarks: 100, grade: 'B', remarks: 'Good progress' },
-          { subject: 'History', marks: 84, maxMarks: 100, grade: 'B', remarks: 'Steady improvement' },
-          { subject: 'Geography', marks: 86, maxMarks: 100, grade: 'B', remarks: 'Good work' },
-        ],
-        totalMarks: 425,
-        maxTotalMarks: 500,
-        percentage: 85.0,
-        grade: 'B',
-        rank: 8,
-        remarks: 'Consistent improvement in all subjects',
-        publishedAt: '2024-03-20T14:00:00Z',
-      },
-    ]
+      // Fetch students
+      const studentsRes = await fetch('/api/students')
+      if (!studentsRes.ok) throw new Error('Failed to load students')
+      const allStudents = await studentsRes.json()
+      const parentChildren = allStudents.filter((s: any) => s.parentId === parentData.id)
+      setStudents(parentChildren)
 
-    setTimeout(() => {
-      setStudents(mockStudents)
-      setResults(mockResults)
+      // Fetch results for children
+      if (parentChildren.length > 0) {
+        const resultsPromises = parentChildren.map((child: Student) =>
+          fetch(`/api/results?studentId=${child.id}`).then(res => res.json())
+        )
+        const resultsResponses = await Promise.all(resultsPromises)
+        const resultsData = resultsResponses.map((res: any) => res.data || []).flat()
+        setResults(resultsData)
+      }
+    } catch (error: any) {
+      console.error('Error loading results data:', error)
+    } finally {
       setIsLoading(false)
-    }, 1000)
-  }, [])
+    }
+  }
+
+  useEffect(() => {
+    if (!isAuthorized || !user) return
+    loadData()
+  }, [isAuthorized, user])
 
   const filteredStudents = students.filter(student => {
     const matchesSearch = student.firstName.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -273,6 +187,11 @@ export default function ResultsPage() {
       'PRACTICAL': 'text-orange-600',
     }
     return colors[type as keyof typeof colors] || 'text-gray-600'
+  }
+
+  const getSelectedStudent = () => {
+    if (!selectedResult) return null
+    return students.find(s => s.id === selectedResult.studentId)
   }
 
   const openDetailsDialog = (result: Result) => {
@@ -393,12 +312,15 @@ export default function ResultsPage() {
         {/* Filters and Actions */}
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
-            <Select value={selectedStudent} onValueChange={setSelectedStudent}>
+            <Select
+              value={selectedStudent || '__ALL__'}
+              onValueChange={(v) => setSelectedStudent(v === '__ALL__' ? '' : v)}
+            >
               <SelectTrigger className="w-[200px]">
                 <SelectValue placeholder="Select child" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Children</SelectItem>
+                <SelectItem value="__ALL__">All Children</SelectItem>
                 {filteredStudents.map((student) => (
                   <SelectItem key={student.id} value={student.id}>
                     {student.firstName} {student.lastName}
@@ -407,12 +329,15 @@ export default function ResultsPage() {
               </SelectContent>
             </Select>
             
-            <Select value={selectedExamType} onValueChange={setSelectedExamType}>
+            <Select
+              value={selectedExamType || '__ALL__'}
+              onValueChange={(v) => setSelectedExamType(v === '__ALL__' ? '' : v)}
+            >
               <SelectTrigger className="w-[150px]">
                 <SelectValue placeholder="Exam type" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Types</SelectItem>
+                <SelectItem value="__ALL__">All Types</SelectItem>
                 <SelectItem value="MIDTERM">Midterm</SelectItem>
                 <SelectItem value="FINAL">Final</SelectItem>
                 <SelectItem value="UNIT_TEST">Unit Test</SelectItem>
@@ -420,23 +345,29 @@ export default function ResultsPage() {
               </SelectContent>
             </Select>
             
-            <Select value={selectedTerm} onValueChange={setSelectedTerm}>
+            <Select
+              value={selectedTerm || '__ALL__'}
+              onValueChange={(v) => setSelectedTerm(v === '__ALL__' ? '' : v)}
+            >
               <SelectTrigger className="w-[120px]">
                 <SelectValue placeholder="Term" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Terms</SelectItem>
+                <SelectItem value="__ALL__">All Terms</SelectItem>
                 <SelectItem value="Term 1">Term 1</SelectItem>
                 <SelectItem value="Term 2">Term 2</SelectItem>
               </SelectContent>
             </Select>
             
-            <Select value={selectedYear} onValueChange={setSelectedYear}>
+            <Select
+              value={selectedYear || '__ALL__'}
+              onValueChange={(v) => setSelectedYear(v === '__ALL__' ? '' : v)}
+            >
               <SelectTrigger className="w-[120px]">
                 <SelectValue placeholder="Year" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Years</SelectItem>
+                <SelectItem value="__ALL__">All Years</SelectItem>
                 <SelectItem value="2023-2024">2023-2024</SelectItem>
                 <SelectItem value="2022-2023">2022-2023</SelectItem>
               </SelectContent>
@@ -476,7 +407,7 @@ export default function ResultsPage() {
                     </div>
                     <div>
                       <CardTitle className="text-lg">{student.firstName} {student.lastName}</CardTitle>
-                      <CardDescription>{student.className}</CardDescription>
+                      <CardDescription>{student.className || 'No class assigned'}</CardDescription>
                       <div className="flex items-center space-x-2 mt-1">
                         <Badge variant="outline">{student.registrationNumber}</Badge>
                       </div>
@@ -486,17 +417,17 @@ export default function ResultsPage() {
                 <CardContent>
                   <div className="space-y-4">
                     {/* Latest Result */}
-                    {latestResult.length > 0 && (
+                    {latestResult && (
                       <div className="p-3 border rounded-lg bg-gray-50">
                         <div className="flex items-center justify-between mb-2">
                           <div>
-                            <h5 className="font-medium text-sm">{latestResult[0].examType}</h5>
-                            <p className="text-xs text-gray-500">{latestResult[0].term} • {latestResult[0].academicYear}</p>
+                            <h5 className="font-medium text-sm">{latestResult.examType}</h5>
+                            <p className="text-xs text-gray-500">{latestResult.term} • {latestResult.academicYear}</p>
                           </div>
                           <div className="text-right">
-                            <div className="text-2xl font-bold text-green-600">{latestResult[0].percentage.toFixed(1)}%</div>
-                            <Badge variant="outline" className="mt-1">Grade {latestResult[0].grade}</Badge>
-                            {latestResult[0].rank && <p className="text-xs text-gray-500">Rank: #{latestResult[0].rank}</p>}
+                            <div className="text-2xl font-bold text-green-600">{latestResult.percentage.toFixed(1)}%</div>
+                            <Badge variant="outline" className="mt-1">Grade {latestResult.grade}</Badge>
+                            {latestResult.rank && <p className="text-xs text-gray-500">Rank: #{latestResult.rank}</p>}
                           </div>
                         </div>
                       </div>
@@ -571,52 +502,55 @@ export default function ResultsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredResults.map((result) => (
-                    <TableRow key={result.id}>
-                      <TableCell>
-                        <div className="flex items-center space-x-2">
-                          <GraduationCap className="h-4 w-4 text-gray-400" />
-                          <div>
-                            <div className="font-medium">{result.studentName}</div>
-                            <div className="text-sm text-gray-500">{result.registrationNumber}</div>
+                  {filteredResults.map((result) => {
+                    const student = students.find(s => s.id === result.studentId)
+                    if (!student) return null
+                    return (
+                      <TableRow key={result.id}>
+                        <TableCell>
+                          <div className="flex items-center space-x-2">
+                            <GraduationCap className="h-4 w-4 text-gray-400" />
+                            <div>
+                              <div className="font-medium">{student.firstName} {student.lastName}</div>
+                              <div className="text-sm text-gray-500">{student.registrationNumber}</div>
+                            </div>
                           </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <span className={`font-medium ${getExamTypeColor(result.examType)}`}>
-                          {result.examType.replace('_', ' ')}
-                        </span>
-                      </TableCell>
-                      <TableCell>{result.term}</TableCell>
-                      <TableCell>
-                        <div className="flex items-center space-x-1">
-                          <Target className="h-4 w-4 text-gray-400" />
-                          <span>{result.totalMarks}/{result.maxTotalMarks}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="text-lg font-bold text-green-600">{result.percentage.toFixed(1)}%</div>
-                      </TableCell>
-                      <TableCell>
-                        <span className={`font-semibold ${getGradeColor(result.grade)}`}>
-                          Grade {result.grade}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        {result.rank ? (
-                          <Badge variant="outline" className="text-blue-600">#{result.rank}</Badge>
-                        ) : (
-                          <span className="text-sm text-gray-400">N/A</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center space-x-1">
-                          <Calendar className="h-4 w-4 text-gray-400" />
-                          <span>{new Date(result.publishedAt).toLocaleDateString()}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center space-x-2">
+                        </TableCell>
+                        <TableCell>
+                          <span className={`font-medium ${getExamTypeColor(result.examType)}`}>
+                            {result.examType.replace('_', ' ')}
+                          </span>
+                        </TableCell>
+                        <TableCell>{result.term}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center space-x-1">
+                            <Target className="h-4 w-4 text-gray-400" />
+                            <span>{result.totalMarks}/{result.maxTotalMarks}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="text-lg font-bold text-green-600">{result.percentage.toFixed(1)}%</div>
+                        </TableCell>
+                        <TableCell>
+                          <span className={`font-semibold ${getGradeColor(result.grade)}`}>
+                            Grade {result.grade}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          {result.rank ? (
+                            <Badge variant="outline" className="text-blue-600">#{result.rank}</Badge>
+                          ) : (
+                            <span className="text-sm text-gray-400">N/A</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center space-x-1">
+                            <Calendar className="h-4 w-4 text-gray-400" />
+                            <span>{new Date(result.publishedAt).toLocaleDateString()}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center space-x-2">
                           <Button
                             variant="outline"
                             size="sm"
@@ -627,7 +561,8 @@ export default function ResultsPage() {
                         </div>
                       </TableCell>
                     </TableRow>
-                  ))}
+                    )
+                  })}
                 </TableBody>
               </Table>
             )}
@@ -643,110 +578,68 @@ export default function ResultsPage() {
                 Complete information about the exam result
               </DialogDescription>
             </DialogHeader>
-            {selectedResult && (
-              <div className="space-y-6">
-                {/* Header Information */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <h4 className="font-medium mb-2">Student Information</h4>
-                    <div className="space-y-2">
-                      <div className="flex justify-between">
-                        <span className="text-sm text-gray-500">Name:</span>
-                        <span className="text-sm">{selectedResult.studentName}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-sm text-gray-500">Registration:</span>
-                        <span className="text-sm">{selectedResult.registrationNumber}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-sm text-gray-500">Class:</span>
-                        <span className="text-sm">{selectedResult.className}</span>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div>
-                    <h4 className="font-medium mb-2">Exam Information</h4>
-                    <div className="space-y-2">
-                      <div className="flex justify-between">
-                        <span className="text-sm text-gray-500">Exam Type:</span>
-                        <span className="text-sm font-medium">{selectedResult.examType.replace('_', ' ')}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-sm text-gray-500">Term:</span>
-                        <span className="text-sm">{selectedResult.term}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-sm text-gray-500">Academic Year:</span>
-                        <span className="text-sm">{selectedResult.academicYear}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-sm text-gray-500">Published:</span>
-                        <span className="text-sm">{new Date(selectedResult.publishedAt).toLocaleString()}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Overall Performance */}
-                <div className="p-4 border rounded-lg bg-gray-50">
-                  <div className="flex items-center justify-between">
+            {(() => {
+              const student = selectedResult ? students.find(s => s.id === selectedResult.studentId) : null
+              if (!selectedResult || !student) return null
+              return (
+                <div className="space-y-6">
+                  <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <h4 className="font-medium">Overall Performance</h4>
-                      <p className="text-sm text-gray-500">Total marks and grade</p>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-3xl font-bold text-green-600">{selectedResult.percentage.toFixed(1)}%</div>
-                      <Badge variant="outline" className="mt-1">Grade {selectedResult.grade}</Badge>
-                      {selectedResult.rank && <p className="text-sm text-gray-500">Class Rank: #{selectedResult.rank}</p>}
-                    </div>
-                  </div>
-                  <div className="mt-2">
-                    <div className="flex items-center justify-between text-sm text-gray-500">
-                      <span>{selectedResult.totalMarks}/{selectedResult.maxTotalMarks} marks</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Subject-wise Performance */}
-                <div>
-                  <h4 className="font-medium mb-4">Subject-wise Performance</h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {selectedResult.subjects.map((subject, index) => (
-                      <div key={index} className="p-4 border rounded-lg">
-                        <div className="flex items-center justify-between mb-2">
-                          <h5 className="font-medium">{subject.subject}</h5>
-                          <Badge variant="outline" className={getGradeColor(subject.grade)}>
-                            Grade {subject.grade}
-                          </Badge>
+                      <h4 className="font-medium mb-2">Student Information</h4>
+                      <div className="space-y-2">
+                        <div className="flex justify-between">
+                          <span className="text-sm text-gray-500">Name:</span>
+                          <span className="text-sm">{student.firstName} {student.lastName}</span>
                         </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-2xl font-bold">{subject.marks}/{subject.maxMarks}</span>
-                          <span className="text-sm text-gray-500">
-                            ({((subject.marks / subject.maxMarks) * 100).toFixed(1)}%)
-                          </span>
+                        <div className="flex justify-between">
+                          <span className="text-sm text-gray-500">Registration:</span>
+                          <span className="text-sm">{student.registrationNumber}</span>
                         </div>
-                        {subject.remarks && (
-                          <p className="text-sm text-gray-600 mt-2">
-                            <strong>Remarks:</strong> {subject.remarks}
-                          </p>
-                        )}
+                        <div className="flex justify-between">
+                          <span className="text-sm text-gray-500">Class:</span>
+                          <span className="text-sm">{student.className || 'N/A'}</span>
+                        </div>
                       </div>
-                    ))}
+                    </div>
+                    <div>
+                      <h4 className="font-medium mb-2">Exam Information</h4>
+                      <div className="space-y-2">
+                        <div className="flex justify-between">
+                          <span className="text-sm text-gray-500">Exam Type:</span>
+                          <span className="text-sm font-medium">{selectedResult.examType.replace('_', ' ')}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-sm text-gray-500">Term:</span>
+                          <span className="text-sm">{selectedResult.term}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-sm text-gray-500">Academic Year:</span>
+                          <span className="text-sm">{selectedResult.academicYear}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-4 gap-4">
+                    <div className="text-center p-4 border rounded-lg">
+                      <div className="text-2xl font-bold text-green-600">{selectedResult.percentage.toFixed(1)}%</div>
+                      <p className="text-sm text-gray-500">Percentage</p>
+                    </div>
+                    <div className="text-center p-4 border rounded-lg">
+                      <div className="text-2xl font-bold text-blue-600">{selectedResult.totalMarks}/{selectedResult.maxTotalMarks}</div>
+                      <p className="text-sm text-gray-500">Total Marks</p>
+                    </div>
+                    <div className="text-center p-4 border rounded-lg">
+                      <div className="text-2xl font-bold text-purple-600">Grade {selectedResult.grade}</div>
+                      <p className="text-sm text-gray-500">Grade</p>
+                    </div>
+                    <div className="text-center p-4 border rounded-lg">
+                      <div className="text-2xl font-bold text-orange-600">{selectedResult.rank ? `#${selectedResult.rank}` : 'N/A'}</div>
+                      <p className="text-sm text-gray-500">Rank</p>
+                    </div>
                   </div>
                 </div>
-
-                {/* Remarks */}
-                {selectedResult.remarks && (
-                  <div>
-                    <h4 className="font-medium mb-2">Overall Remarks</h4>
-                    <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded-lg">
-                      {selectedResult.remarks}
-                    </p>
-                  </div>
-                )}
-              </div>
-            )}
+              )
+            })()}
             <DialogFooter>
               <Button variant="outline" onClick={() => setIsDetailsDialogOpen(false)}>
                 Close

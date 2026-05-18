@@ -40,17 +40,14 @@ interface Student {
   registrationNumber: string
   firstName: string
   lastName: string
-  classId: string
-  className: string
+  classId: string | null
+  className: string | null
+  parentId: string | null
 }
 
 interface AttendanceRecord {
   id: string
   studentId: string
-  studentName: string
-  registrationNumber: string
-  classId: string
-  className: string
   date: string
   status: 'PRESENT' | 'ABSENT' | 'LATE' | 'EXCUSED'
   remarks?: string
@@ -66,112 +63,45 @@ export default function AttendancePage() {
   const [selectedStudent, setSelectedStudent] = useState<string>('')
   const [selectedMonth, setSelectedMonth] = useState<string>(new Date().toISOString().slice(0, 7))
 
-  // Mock data - in real app, this would come from API
-  useEffect(() => {
-    const mockStudents: Student[] = [
-      { id: '1', registrationNumber: 'REG2024001', firstName: 'Alice', lastName: 'Johnson', classId: '1', className: 'Grade 5-A' },
-      { id: '2', registrationNumber: 'REG2024002', firstName: 'Bob', lastName: 'Johnson', classId: '2', className: 'Grade 4-B' },
-    ]
+  const loadData = async () => {
+    try {
+      // Fetch parent's children
+      const parentsRes = await fetch('/api/parents')
+      if (!parentsRes.ok) throw new Error('Failed to load parent data')
+      const parentsData = await parentsRes.json()
+      const parentData = parentsData.find((p: any) => p.email === user?.email)
+      
+      if (!parentData) {
+        throw new Error('Parent data not found')
+      }
 
-    const mockAttendanceRecords: AttendanceRecord[] = [
-      {
-        id: '1',
-        studentId: '1',
-        studentName: 'Alice Johnson',
-        registrationNumber: 'REG2024001',
-        classId: '1',
-        className: 'Grade 5-A',
-        date: '2024-03-15',
-        status: 'PRESENT',
-        recordedAt: '2024-03-15T08:30:00Z',
-      },
-      {
-        id: '2',
-        studentId: '1',
-        studentName: 'Alice Johnson',
-        registrationNumber: 'REG2024001',
-        classId: '1',
-        className: 'Grade 5-A',
-        date: '2024-03-14',
-        status: 'PRESENT',
-        recordedAt: '2024-03-14T08:30:00Z',
-      },
-      {
-        id: '3',
-        studentId: '1',
-        studentName: 'Alice Johnson',
-        registrationNumber: 'REG2024001',
-        classId: '1',
-        className: 'Grade 5-A',
-        date: '2024-03-13',
-        status: 'LATE',
-        remarks: 'Traffic delay',
-        recordedAt: '2024-03-13T08:45:00Z',
-      },
-      {
-        id: '4',
-        studentId: '1',
-        studentName: 'Alice Johnson',
-        registrationNumber: 'REG2024001',
-        classId: '1',
-        className: 'Grade 5-A',
-        date: '2024-03-12',
-        status: 'PRESENT',
-        recordedAt: '2024-03-12T08:30:00Z',
-      },
-      {
-        id: '5',
-        studentId: '1',
-        studentName: 'Alice Johnson',
-        registrationNumber: 'REG2024001',
-        classId: '1',
-        className: 'Grade 5-A',
-        date: '2024-03-11',
-        status: 'ABSENT',
-        remarks: 'Sick leave',
-        recordedAt: '2024-03-11T08:30:00Z',
-      },
-      {
-        id: '6',
-        studentId: '2',
-        studentName: 'Bob Johnson',
-        registrationNumber: 'REG2024002',
-        classId: '2',
-        className: 'Grade 4-B',
-        date: '2024-03-15',
-        status: 'PRESENT',
-        recordedAt: '2024-03-15T08:30:00Z',
-      },
-      {
-        id: '7',
-        studentId: '2',
-        studentName: 'Bob Johnson',
-        registrationNumber: 'REG2024002',
-        classId: '2',
-        className: 'Grade 4-B',
-        date: '2024-03-14',
-        status: 'PRESENT',
-        recordedAt: '2024-03-14T08:30:00Z',
-      },
-      {
-        id: '8',
-        studentId: '2',
-        studentName: 'Bob Johnson',
-        registrationNumber: 'REG2024002',
-        classId: '2',
-        className: 'Grade 4-B',
-        date: '2024-03-13',
-        status: 'PRESENT',
-        recordedAt: '2024-03-13T08:30:00Z',
-      },
-    ]
+      // Fetch students
+      const studentsRes = await fetch('/api/students')
+      if (!studentsRes.ok) throw new Error('Failed to load students')
+      const allStudents = await studentsRes.json()
+      const parentChildren = allStudents.filter((s: any) => s.parentId === parentData.id)
+      setStudents(parentChildren)
 
-    setTimeout(() => {
-      setStudents(mockStudents)
-      setAttendanceRecords(mockAttendanceRecords)
+      // Fetch attendance for children
+      if (parentChildren.length > 0) {
+        const attendancePromises = parentChildren.map((child: Student) =>
+          fetch(`/api/attendance?studentId=${child.id}`).then(res => res.json())
+        )
+        const attendanceResponses = await Promise.all(attendancePromises)
+        const attendanceData = attendanceResponses.map((res: any) => res.data || []).flat()
+        setAttendanceRecords(attendanceData)
+      }
+    } catch (error: any) {
+      console.error('Error loading attendance data:', error)
+    } finally {
       setIsLoading(false)
-    }, 1000)
-  }, [])
+    }
+  }
+
+  useEffect(() => {
+    if (!isAuthorized || !user) return
+    loadData()
+  }, [isAuthorized, user])
 
   const filteredStudents = students.filter(student => {
     const matchesSearch = student.firstName.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -182,7 +112,7 @@ export default function AttendancePage() {
 
   const filteredAttendanceRecords = attendanceRecords.filter(record => {
     const matchesStudent = !selectedStudent || record.studentId === selectedStudent
-    const matchesMonth = record.date.startsWith(selectedMonth)
+    const matchesMonth = record.date ? record.date.startsWith(selectedMonth) : false
     return matchesStudent && matchesMonth
   })
 
@@ -303,12 +233,15 @@ export default function AttendancePage() {
         {/* Filters and Actions */}
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
-            <Select value={selectedStudent} onValueChange={setSelectedStudent}>
+            <Select
+              value={selectedStudent || '__ALL__'}
+              onValueChange={(v) => setSelectedStudent(v === '__ALL__' ? '' : v)}
+            >
               <SelectTrigger className="w-[200px]">
                 <SelectValue placeholder="Select child" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Children</SelectItem>
+                <SelectItem value="__ALL__">All Children</SelectItem>
                 {filteredStudents.map((student) => (
                   <SelectItem key={student.id} value={student.id}>
                     {student.firstName} {student.lastName}
@@ -445,40 +378,44 @@ export default function AttendancePage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredAttendanceRecords.map((record) => (
-                    <TableRow key={record.id}>
-                      <TableCell>
-                        <div className="flex items-center space-x-2">
-                          <GraduationCap className="h-4 w-4 text-gray-400" />
-                          <span>{record.studentName}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>{record.registrationNumber}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{record.className}</Badge>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center space-x-1">
-                          <Calendar className="h-4 w-4 text-gray-400" />
-                          <span>{new Date(record.date).toLocaleDateString()}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>{getStatusBadge(record.status)}</TableCell>
-                      <TableCell>
-                        {record.remarks ? (
-                          <span className="text-sm text-gray-600">{record.remarks}</span>
-                        ) : (
-                          <span className="text-sm text-gray-400">No remarks</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center space-x-1">
-                          <Clock className="h-4 w-4 text-gray-400" />
-                          <span>{new Date(record.recordedAt).toLocaleTimeString()}</span>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {filteredAttendanceRecords.map((record) => {
+                    const student = students.find(s => s.id === record.studentId)
+                    if (!student) return null
+                    return (
+                      <TableRow key={record.id}>
+                        <TableCell>
+                          <div className="flex items-center space-x-2">
+                            <GraduationCap className="h-4 w-4 text-gray-400" />
+                            <span>{student.firstName} {student.lastName}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>{student.registrationNumber}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline">{student.className || 'N/A'}</Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center space-x-1">
+                            <Calendar className="h-4 w-4 text-gray-400" />
+                            <span>{new Date(record.date).toLocaleDateString()}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>{getStatusBadge(record.status)}</TableCell>
+                        <TableCell>
+                          {record.remarks ? (
+                            <span className="text-sm text-gray-600">{record.remarks}</span>
+                          ) : (
+                            <span className="text-sm text-gray-400">No remarks</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center space-x-1">
+                            <Clock className="h-4 w-4 text-gray-400" />
+                            <span>{new Date(record.recordedAt).toLocaleTimeString()}</span>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
                 </TableBody>
               </Table>
             )}

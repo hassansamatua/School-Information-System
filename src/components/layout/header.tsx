@@ -1,10 +1,10 @@
 'use client'
 
-import React from 'react'
-import { useSession } from 'next-auth/react'
+import React, { useEffect, useState } from 'react'
+import { useSession, signOut } from 'next-auth/react'
 import { Button } from '@/components/ui/button'
 import { ThemeToggleSimple } from '@/components/ui/theme-toggle'
-import { Bell, Search, User } from 'lucide-react'
+import { Bell, Search, User, Check, Trash2, X } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import {
   DropdownMenu,
@@ -15,7 +15,18 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Badge } from '@/components/ui/badge'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import Link from 'next/link'
+
+interface Notification {
+  id: string
+  title: string
+  message: string
+  type: string
+  isRead: boolean
+  createdAt: string
+}
 
 interface HeaderProps {
   title?: string
@@ -24,12 +35,76 @@ interface HeaderProps {
 
 export function Header({ title, subtitle }: HeaderProps) {
   const { data: session } = useSession()
+  const [notifications, setNotifications] = useState<Notification[]>([])
+  const [unreadCount, setUnreadCount] = useState(0)
+  const [isOpen, setIsOpen] = useState(false)
 
   const userInitials = session?.user?.name
     ?.split(' ')
     .map(word => word.charAt(0))
     .join('')
     .toUpperCase()
+
+  const loadNotifications = async () => {
+    if (!session?.user) return
+    try {
+      const res = await fetch('/api/notifications')
+      if (!res.ok) return
+      const data = await res.json()
+      setNotifications(data)
+      setUnreadCount(data.filter((n: Notification) => !n.isRead).length)
+    } catch (e) {
+      console.error('Failed to load notifications', e)
+    }
+  }
+
+  useEffect(() => {
+    loadNotifications()
+    const interval = setInterval(loadNotifications, 30000)
+    return () => clearInterval(interval)
+  }, [session])
+
+  const markAsRead = async (id: string) => {
+    try {
+      await fetch(`/api/notifications/${id}`, { method: 'PATCH' })
+      setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n))
+      setUnreadCount(prev => Math.max(0, prev - 1))
+    } catch (e) {
+      console.error('Failed to mark as read', e)
+    }
+  }
+
+  const markAllAsRead = async () => {
+    try {
+      await fetch('/api/notifications', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'read-all' }) })
+      setNotifications(prev => prev.map(n => ({ ...n, isRead: true })))
+      setUnreadCount(0)
+    } catch (e) {
+      console.error('Failed to mark all as read', e)
+    }
+  }
+
+  const deleteNotification = async (id: string) => {
+    try {
+      const wasUnread = notifications.find(n => n.id === id)?.isRead === false
+      await fetch(`/api/notifications/${id}`, { method: 'DELETE' })
+      setNotifications(prev => prev.filter(n => n.id !== id))
+      if (wasUnread) {
+        setUnreadCount(prev => Math.max(0, prev - 1))
+      }
+    } catch (e) {
+      console.error('Failed to delete notification', e)
+    }
+  }
+
+  const getTypeColor = (type: string) => {
+    switch (type) {
+      case 'SUCCESS': return 'bg-green-100 text-green-800'
+      case 'WARNING': return 'bg-yellow-100 text-yellow-800'
+      case 'ERROR': return 'bg-red-100 text-red-800'
+      default: return 'bg-blue-100 text-blue-800'
+    }
+  }
 
   return (
     <header className="sticky top-0 z-40 w-full border-b bg-background">
@@ -57,20 +132,73 @@ export function Header({ title, subtitle }: HeaderProps) {
               />
             </div>
           </div>
-          
+
           <nav className="flex items-center space-x-2">
-            <Button variant="ghost" size="icon">
-              <Bell className="h-4 w-4" />
-              <span className="sr-only">Notifications</span>
-            </Button>
-            
+            <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="relative">
+                  <Bell className="h-4 w-4" />
+                  {unreadCount > 0 && (
+                    <Badge className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs">
+                      {unreadCount > 9 ? '9+' : unreadCount}
+                    </Badge>
+                  )}
+                  <span className="sr-only">Notifications</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-80" align="end" forceMount>
+                <div className="flex items-center justify-between px-2 py-2">
+                  <DropdownMenuLabel>Notifications</DropdownMenuLabel>
+                  {unreadCount > 0 && (
+                    <Button variant="ghost" size="sm" onClick={markAllAsRead} className="h-auto py-1 text-xs">
+                      Mark all read
+                    </Button>
+                  )}
+                </div>
+                <DropdownMenuSeparator />
+                <ScrollArea className="h-[300px]">
+                  {notifications.length === 0 ? (
+                    <div className="py-8 text-center text-sm text-muted-foreground">No notifications</div>
+                  ) : (
+                    notifications.map(n => (
+                      <div key={n.id} className="group relative flex items-start gap-3 px-2 py-3 hover:bg-accent">
+                        <div className={`mt-0.5 h-2 w-2 shrink-0 rounded-full ${n.isRead ? 'bg-muted' : 'bg-blue-500'}`} />
+                        <div className="flex-1 space-y-1">
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="text-sm font-medium leading-none">{n.title}</p>
+                            <Badge variant="outline" className={`text-[10px] ${getTypeColor(n.type)}`}>
+                              {n.type}
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground line-clamp-2">{n.message}</p>
+                          <p className="text-[10px] text-muted-foreground">
+                            {new Date(n.createdAt).toLocaleString()}
+                          </p>
+                        </div>
+                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          {!n.isRead && (
+                            <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => markAsRead(n.id)}>
+                              <Check className="h-3 w-3" />
+                            </Button>
+                          )}
+                          <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" onClick={() => deleteNotification(n.id)}>
+                            <X className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </ScrollArea>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
             <ThemeToggleSimple />
-            
+
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="relative h-8 w-8 rounded-full">
                   <Avatar className="h-8 w-8">
-                    <AvatarImage src="" alt={session?.user?.name} />
+                    <AvatarImage src={undefined} alt={session?.user?.name || ''} />
                     <AvatarFallback>{userInitials}</AvatarFallback>
                   </Avatar>
                 </Button>
@@ -107,12 +235,15 @@ export function Header({ title, subtitle }: HeaderProps) {
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
-                  <Link href="/api/auth/signout">
+                  <button
+                    onClick={() => signOut({ callbackUrl: '/login' })}
+                    className="w-full flex items-center cursor-pointer"
+                  >
                     <svg className="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                     </svg>
                     <span>Sign out</span>
-                  </Link>
+                  </button>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

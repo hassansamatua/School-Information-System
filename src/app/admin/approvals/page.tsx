@@ -76,74 +76,25 @@ export default function ApprovalsPage() {
     comments: '',
   })
 
-  // Mock data - in real app, this would come from API
-  useEffect(() => {
-    const mockSubmissions: Submission[] = [
-      {
-        id: '1',
-        type: 'ANNOUNCEMENT',
-        title: 'School Meeting Tomorrow',
-        content: 'There will be a school meeting tomorrow at 10 AM in the main hall. All teachers are required to attend.',
-        targetAudience: 'TEACHERS',
-        status: 'PENDING_APPROVAL',
-        submittedBy: 'teacher1',
-        submittedByName: 'John Smith',
-        submittedAt: '2024-03-15T10:30:00Z',
-      },
-      {
-        id: '2',
-        type: 'EVENT',
-        title: 'Science Fair',
-        content: 'Annual science fair will be held next month. Students are encouraged to participate with their projects.',
-        targetAudience: 'ALL',
-        status: 'PENDING_APPROVAL',
-        submittedBy: 'teacher2',
-        submittedByName: 'Sarah Johnson',
-        submittedAt: '2024-03-15T09:15:00Z',
-      },
-      {
-        id: '3',
-        type: 'PERFORMANCE',
-        title: 'Grade 5 Math Test Results',
-        content: 'Math test results for Grade 5 students have been recorded.',
-        targetAudience: 'SPECIFIC_CLASS',
-        targetId: 'class1',
-        status: 'APPROVED',
-        submittedBy: 'teacher3',
-        submittedByName: 'Michael Brown',
-        submittedAt: '2024-03-14T14:20:00Z',
-      },
-      {
-        id: '4',
-        type: 'ANNOUNCEMENT',
-        title: 'Holiday Schedule',
-        content: 'Upcoming holiday schedule for the next month has been updated.',
-        targetAudience: 'ALL',
-        status: 'REJECTED',
-        submittedBy: 'teacher1',
-        submittedByName: 'John Smith',
-        submittedAt: '2024-03-13T11:45:00Z',
-        rejectionReason: 'Please provide specific dates for the holidays',
-      },
-      {
-        id: '5',
-        type: 'ATTENDANCE',
-        title: 'Class 6-B Attendance',
-        content: 'Daily attendance for Class 6-B has been recorded.',
-        targetAudience: 'SPECIFIC_CLASS',
-        targetId: 'class2',
-        status: 'PENDING_APPROVAL',
-        submittedBy: 'teacher2',
-        submittedByName: 'Sarah Johnson',
-        submittedAt: '2024-03-15T08:00:00Z',
-      },
-    ]
-    
-    setTimeout(() => {
-      setSubmissions(mockSubmissions)
+  const loadSubmissions = async () => {
+    try {
+      const res = await fetch('/api/approvals?status=ALL')
+      if (!res.ok) throw new Error(`Failed to load (${res.status})`)
+      const data = await res.json()
+      setSubmissions(data)
+    } catch (e: any) {
+      console.error(e)
+      toast.error(e?.message || 'Failed to load submissions')
+    } finally {
       setIsLoading(false)
-    }, 1000)
-  }, [])
+    }
+  }
+
+  useEffect(() => {
+    if (!isAuthorized) return
+    loadSubmissions()
+  }, [isAuthorized])
+
 
   const filteredSubmissions = submissions.filter(submission => {
     const matchesSearch = submission.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -163,25 +114,31 @@ export default function ApprovalsPage() {
   const handleApprove = async () => {
     try {
       if (!selectedSubmission) return
-
-      // Mock API call
-      const updatedSubmission = {
-        ...selectedSubmission,
-        status: approvalForm.status as 'APPROVED' | 'REJECTED',
-        rejectionReason: approvalForm.status === 'REJECTED' ? approvalForm.comments : undefined,
+      const action = approvalForm.status === 'APPROVED' ? 'approve' : 'reject'
+      if (action === 'reject' && !approvalForm.comments.trim()) {
+        toast.error('Rejection reason is required')
+        return
       }
-
-      setSubmissions(prev => prev.map(s => 
-        s.id === selectedSubmission.id ? updatedSubmission : s
-      ))
-      
+      const res = await fetch(`/api/approvals/${selectedSubmission.id}/${action}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(
+          action === 'approve'
+            ? { comments: approvalForm.comments || undefined }
+            : { reason: approvalForm.comments }
+        ),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || `Failed (${res.status})`)
+      }
       setIsApprovalDialogOpen(false)
       setSelectedSubmission(null)
       setApprovalForm({ status: 'APPROVED', comments: '' })
-      
-      toast.success(`Submission ${approvalForm.status.toLowerCase()} successfully`)
-    } catch (error) {
-      toast.error('Failed to process approval')
+      toast.success(`Submission ${action === 'approve' ? 'approved' : 'rejected'} successfully`)
+      await loadSubmissions()
+    } catch (error: any) {
+      toast.error(error?.message || 'Failed to process approval')
     }
   }
 

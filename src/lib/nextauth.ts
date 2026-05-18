@@ -44,7 +44,7 @@ export const authOptions: NextAuthOptions = {
           id: user.id,
           email: user.email,
           role: user.role,
-          name: user.name,
+          name: `${user.admin?.firstName || user.teacher?.firstName || user.parent?.firstName || ''} ${user.admin?.lastName || user.teacher?.lastName || user.parent?.lastName || ''}`.trim(),
         }
       }
     })

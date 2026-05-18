@@ -7,13 +7,13 @@ export const loginSchema = z.object({
 })
 
 export const registerSchema = z.object({
-  firstName: z.string().min(1, 'First name is required').max(50, 'First name must be less than 50 characters'),
-  lastName: z.string().min(1, 'Last name is required').max(50, 'Last name must be less than 50 characters'),
+  firstName: z.string().min(1, 'Please enter your first name').max(50, 'First name is too long'),
+  lastName: z.string().min(1, 'Please enter your last name').max(50, 'Last name is too long'),
   email: z.string().email('Please enter a valid email address'),
-  password: z.string().min(8, 'Password must be at least 8 characters long'),
+  password: z.string().min(8, 'Password should be at least 8 characters'),
   confirmPassword: z.string().min(1, 'Please confirm your password'),
   phone: z.string().optional(),
-  studentRegistrationNumber: z.string().min(1, 'Student registration number is required'),
+  studentRegistrationNumber: z.string().min(1, 'Please enter your child\'s registration number'),
 }).refine((data) => data.password === data.confirmPassword, {
   message: 'Passwords do not match',
   path: ['confirmPassword'],
@@ -59,7 +59,7 @@ export const studentSchema = z.object({
     const age = now.getFullYear() - parsedDate.getFullYear()
     return age >= 5 && age <= 25
   }, 'Student age must be between 5 and 25 years'),
-  gender: z.enum(['MALE', 'FEMALE'], { required_error: 'Gender is required' }),
+  gender: z.enum(['MALE', 'FEMALE']),
   address: z.string().max(200, 'Address must be less than 200 characters').optional(),
   phone: z.string().regex(/^[+]?[(]?[0-9]{1,4}[)]?[-\s\.]?[(]?[0-9]{1,4}[)]?[-\s\.]?[0-9]{1,9}$/, 'Please enter a valid phone number').optional(),
   email: z.string().email('Please enter a valid email address').optional(),
@@ -76,7 +76,7 @@ export const updateStudentSchema = z.object({
     const age = now.getFullYear() - parsedDate.getFullYear()
     return age >= 5 && age <= 25
   }, 'Student age must be between 5 and 25 years'),
-  gender: z.enum(['MALE', 'FEMALE'], { required_error: 'Gender is required' }),
+  gender: z.enum(['MALE', 'FEMALE']),
   address: z.string().max(200, 'Address must be less than 200 characters').optional(),
   phone: z.string().regex(/^[+]?[(]?[0-9]{1,4}[)]?[-\s\.]?[(]?[0-9]{1,4}[)]?[-\s\.]?[0-9]{1,9}$/, 'Please enter a valid phone number').optional(),
   email: z.string().email('Please enter a valid email address').optional(),
@@ -110,7 +110,7 @@ export const updateParentSchema = z.object({
 // Class Validations
 export const classSchema = z.object({
   name: z.string().min(1, 'Class name is required').max(50, 'Class name must be less than 50 characters'),
-  grade: z.string().min(1, 'Grade is required').max(20, 'Grade must be less than 20 characters'),
+  form: z.number().min(1, 'Form is required').max(4, 'Form must be between 1 and 4'),
   section: z.string().max(10, 'Section must be less than 10 characters').optional(),
   teacherId: z.string().uuid('Please select a valid teacher').optional(),
   maxStudents: z.number().min(1, 'Maximum students must be at least 1').max(100, 'Maximum students cannot exceed 100'),
@@ -118,7 +118,7 @@ export const classSchema = z.object({
 
 export const updateClassSchema = z.object({
   name: z.string().min(1, 'Class name is required').max(50, 'Class name must be less than 50 characters'),
-  grade: z.string().min(1, 'Grade is required').max(20, 'Grade must be less than 20 characters'),
+  form: z.number().min(1, 'Form is required').max(4, 'Form must be between 1 and 4'),
   section: z.string().max(10, 'Section must be less than 10 characters').optional(),
   teacherId: z.string().uuid('Please select a valid teacher').optional(),
   maxStudents: z.number().min(1, 'Maximum students must be at least 1').max(100, 'Maximum students cannot exceed 100'),
@@ -130,7 +130,7 @@ export const attendanceSchema = z.object({
   studentId: z.string().uuid('Please select a valid student'),
   classId: z.string().uuid('Please select a valid class'),
   date: z.string().min(1, 'Date is required'),
-  status: z.enum(['PRESENT', 'ABSENT', 'LATE', 'EXCUSED'], { required_error: 'Attendance status is required' }),
+  status: z.enum(['PRESENT', 'ABSENT', 'LATE', 'EXCUSED']),
   remarks: z.string().max(200, 'Remarks must be less than 200 characters').optional(),
 })
 
@@ -139,7 +139,7 @@ export const bulkAttendanceSchema = z.object({
   date: z.string().min(1, 'Date is required'),
   attendance: z.array(z.object({
     studentId: z.string().uuid('Please select a valid student'),
-    status: z.enum(['PRESENT', 'ABSENT', 'LATE', 'EXCUSED'], { required_error: 'Attendance status is required' }),
+    status: z.enum(['PRESENT', 'ABSENT', 'LATE', 'EXCUSED']),
     remarks: z.string().max(200, 'Remarks must be less than 200 characters').optional(),
   })).min(1, 'At least one student attendance is required'),
 })
@@ -149,7 +149,7 @@ export const performanceSchema = z.object({
   studentId: z.string().uuid('Please select a valid student'),
   classId: z.string().uuid('Please select a valid class'),
   subject: z.string().min(1, 'Subject is required').max(50, 'Subject must be less than 50 characters'),
-  assessmentType: z.enum(['QUIZ', 'TEST', 'ASSIGNMENT', 'PROJECT', 'EXAM'], { required_error: 'Assessment type is required' }),
+  assessmentType: z.enum(['QUIZ', 'TEST', 'ASSIGNMENT', 'PROJECT', 'EXAM']),
   score: z.number().min(0, 'Score must be at least 0'),
   maxScore: z.number().min(1, 'Maximum score must be at least 1'),
   remarks: z.string().max(200, 'Remarks must be less than 200 characters').optional(),
@@ -163,14 +163,15 @@ export const performanceSchema = z.object({
 export const resultSchema = z.object({
   studentId: z.string().uuid('Please select a valid student'),
   classId: z.string().uuid('Please select a valid class'),
-  examType: z.enum(['MIDTERM', 'FINAL', 'UNIT_TEST', 'PRACTICAL'], { required_error: 'Exam type is required' }),
+  examType: z.enum(['MIDTERM', 'FINAL', 'UNIT_TEST', 'PRACTICAL']),
   term: z.string().min(1, 'Term is required').max(20, 'Term must be less than 20 characters'),
   academicYear: z.string().min(1, 'Academic year is required').max(20, 'Academic year must be less than 20 characters'),
   subjects: z.array(z.object({
     subject: z.string().min(1, 'Subject is required').max(50, 'Subject must be less than 50 characters'),
     marks: z.number().min(0, 'Marks must be at least 0'),
     maxMarks: z.number().min(1, 'Maximum marks must be at least 1'),
-    grade: z.string().max(5, 'Grade must be less than 5 characters').optional(),
+    form: z.number().min(1, 'Form must be between 1 and 4').max(4, 'Form must be between 1 and 4').optional(),
+  stream: z.string().max(1, 'Stream must be a single letter').optional(),
     remarks: z.string().max(200, 'Remarks must be less than 200 characters').optional(),
   })).min(1, 'At least one subject is required'),
   remarks: z.string().max(500, 'Remarks must be less than 500 characters').optional(),
@@ -185,8 +186,8 @@ export const resultSchema = z.object({
 export const announcementSchema = z.object({
   title: z.string().min(1, 'Title is required').max(100, 'Title must be less than 100 characters'),
   content: z.string().min(1, 'Content is required').max(2000, 'Content must be less than 2000 characters'),
-  type: z.enum(['GENERAL', 'URGENT', 'ACADEMIC', 'EVENT'], { required_error: 'Announcement type is required' }),
-  targetAudience: z.enum(['ALL', 'TEACHERS', 'PARENTS', 'SPECIFIC_CLASS', 'SPECIFIC_STUDENT'], { required_error: 'Target audience is required' }),
+  type: z.enum(['GENERAL', 'URGENT', 'ACADEMIC', 'EVENT']),
+  targetAudience: z.enum(['ALL', 'TEACHERS', 'PARENTS', 'SPECIFIC_CLASS', 'SPECIFIC_STUDENT']),
   targetId: z.string().uuid('Please select a valid target').optional(),
   expiresAt: z.string().optional(),
 })
@@ -195,11 +196,11 @@ export const announcementSchema = z.object({
 export const eventSchema = z.object({
   title: z.string().min(1, 'Title is required').max(100, 'Title must be less than 100 characters'),
   description: z.string().min(1, 'Description is required').max(2000, 'Description must be less than 2000 characters'),
-  type: z.enum(['ACADEMIC', 'SPORTS', 'CULTURAL', 'MEETING', 'HOLIDAY'], { required_error: 'Event type is required' }),
+  type: z.enum(['ACADEMIC', 'SPORTS', 'CULTURAL', 'MEETING', 'HOLIDAY']).refine((val) => val !== undefined, { message: 'Event type is required' }),
   startDate: z.string().min(1, 'Start date is required'),
   endDate: z.string().min(1, 'End date is required'),
   location: z.string().max(200, 'Location must be less than 200 characters').optional(),
-  targetAudience: z.enum(['ALL', 'TEACHERS', 'PARENTS', 'SPECIFIC_CLASS', 'SPECIFIC_STUDENT'], { required_error: 'Target audience is required' }),
+  targetAudience: z.enum(['ALL', 'TEACHERS', 'PARENTS', 'SPECIFIC_CLASS', 'SPECIFIC_STUDENT']),
   targetId: z.string().uuid('Please select a valid target').optional(),
 }).refine((data) => new Date(data.endDate) >= new Date(data.startDate), {
   message: 'End date must be after start date',
@@ -208,13 +209,13 @@ export const eventSchema = z.object({
 
 // Approval Validations
 export const approvalSchema = z.object({
-  status: z.enum(['APPROVED', 'REJECTED'], { required_error: 'Approval status is required' }),
+  status: z.enum(['APPROVED', 'REJECTED']).refine((val) => val !== undefined, { message: 'Approval status is required' }),
   comments: z.string().max(500, 'Comments must be less than 500 characters').optional(),
 })
 
 // Report Validations
 export const reportSchema = z.object({
-  type: z.enum(['ATTENDANCE', 'PERFORMANCE', 'RESULTS', 'STUDENT_LIST', 'TEACHER_ACTIVITY', 'PARENT_LIST'], { required_error: 'Report type is required' }),
+  type: z.enum(['ATTENDANCE', 'PERFORMANCE', 'RESULTS', 'STUDENT_LIST', 'TEACHER_ACTIVITY', 'PARENT_LIST']).refine((val) => val !== undefined, { message: 'Report type is required' }),
   dateFrom: z.string().optional(),
   dateTo: z.string().optional(),
   classId: z.string().uuid('Please select a valid class').optional(),
@@ -260,7 +261,7 @@ export const fileUploadSchema = z.object({
 export const notificationSchema = z.object({
   title: z.string().min(1, 'Title is required').max(100, 'Title must be less than 100 characters'),
   message: z.string().min(1, 'Message is required').max(500, 'Message must be less than 500 characters'),
-  type: z.enum(['INFO', 'SUCCESS', 'WARNING', 'ERROR'], { required_error: 'Notification type is required' }),
+  type: z.enum(['INFO', 'SUCCESS', 'WARNING', 'ERROR']).refine((val) => val !== undefined, { message: 'Notification type is required' }),
   userIds: z.array(z.string().uuid()).optional(),
   targetAudience: z.enum(['ALL', 'TEACHERS', 'PARENTS', 'SPECIFIC_CLASS', 'SPECIFIC_STUDENT']).optional(),
   targetId: z.string().uuid().optional(),

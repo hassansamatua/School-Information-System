@@ -1,6 +1,6 @@
 'use client'
 
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { DashboardLayout, PageHeader } from '@/components/layout/dashboard-layout'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -16,28 +16,54 @@ import {
   AlertCircle,
 } from 'lucide-react'
 
+interface DashboardStats {
+  totalStudents: number
+  totalTeachers: number
+  totalParents: number
+  totalClasses: number
+  pendingApprovals: number
+  todayAttendance: number
+  attendanceRate: string
+  averagePerformance: string
+  recentActivity: Array<{
+    id: string
+    type: string
+    description: string
+    time: string
+  }>
+}
+
 export default function AdminDashboard() {
   const { user, isAuthorized } = useRequireAuth('ADMIN')
+  const [stats, setStats] = useState<DashboardStats | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const res = await fetch('/api/admin/dashboard/stats')
+        if (res.ok) {
+          const data = await res.json()
+          setStats(data)
+        }
+      } catch (error) {
+        console.error('Failed to fetch dashboard stats:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    if (isAuthorized) {
+      fetchStats()
+    }
+  }, [isAuthorized])
 
   if (!isAuthorized) {
     return <div>Loading...</div>
   }
 
-  // Mock data - in real app, this would come from API
-  const stats = {
-    totalStudents: 1250,
-    totalTeachers: 45,
-    totalParents: 890,
-    totalClasses: 28,
-    pendingApprovals: 12,
-    todayAttendance: 1180,
-    averagePerformance: 85.2,
-    recentActivity: [
-      { id: 1, type: 'teacher', description: 'New teacher registered: John Smith', time: '2 hours ago' },
-      { id: 2, type: 'parent', description: 'Parent registration pending: Mary Johnson', time: '3 hours ago' },
-      { id: 3, type: 'announcement', description: 'New announcement submitted: School Meeting', time: '5 hours ago' },
-      { id: 4, type: 'student', description: 'Student enrolled: Alice Brown', time: '6 hours ago' },
-    ],
+  if (loading || !stats) {
+    return <div>Loading dashboard...</div>
   }
 
   const StatCard = ({ title, value, icon: Icon, description, trend }: any) => (

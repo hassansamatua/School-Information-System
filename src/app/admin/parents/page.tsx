@@ -45,8 +45,16 @@ interface Parent {
   occupation?: string
   address?: string
   isApproved: boolean
+  isActive?: boolean
+  studentCount: number
+  students?: Array<{
+    id: string
+    firstName: string
+    lastName: string
+    registrationNumber: string
+    className: string | null
+  }>
   createdAt: string
-  students?: number
 }
 
 export default function ParentsPage() {
@@ -57,64 +65,24 @@ export default function ParentsPage() {
   const [selectedParent, setSelectedParent] = useState<Parent | null>(null)
   const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false)
 
-  // Mock data - in real app, this would come from API
-  useEffect(() => {
-    const mockParents: Parent[] = [
-      {
-        id: '1',
-        firstName: 'Mary',
-        lastName: 'Johnson',
-        email: 'mary.johnson@email.com',
-        phone: '+1234567890',
-        occupation: 'Engineer',
-        address: '123 Main St, City',
-        isApproved: true,
-        createdAt: '2024-01-15',
-        students: 2,
-      },
-      {
-        id: '2',
-        firstName: 'David',
-        lastName: 'Williams',
-        email: 'david.williams@email.com',
-        phone: '+1234567891',
-        occupation: 'Teacher',
-        address: '456 Oak Ave, City',
-        isApproved: false,
-        createdAt: '2024-02-01',
-        students: 1,
-      },
-      {
-        id: '3',
-        firstName: 'Lisa',
-        lastName: 'Brown',
-        email: 'lisa.brown@email.com',
-        phone: '+1234567892',
-        occupation: 'Doctor',
-        address: '789 Pine Rd, City',
-        isApproved: true,
-        createdAt: '2024-02-15',
-        students: 1,
-      },
-      {
-        id: '4',
-        firstName: 'Robert',
-        lastName: 'Davis',
-        email: 'robert.davis@email.com',
-        phone: '+1234567893',
-        occupation: 'Business Owner',
-        address: '321 Elm St, City',
-        isApproved: false,
-        createdAt: '2024-03-01',
-        students: 3,
-      },
-    ]
-    
-    setTimeout(() => {
-      setParents(mockParents)
+  const loadParents = async () => {
+    try {
+      const res = await fetch('/api/parents')
+      if (!res.ok) throw new Error(`Failed to load (${res.status})`)
+      const data = await res.json()
+      setParents(data)
+    } catch (e: any) {
+      console.error(e)
+      toast.error(e?.message || 'Failed to load parents')
+    } finally {
       setIsLoading(false)
-    }, 1000)
-  }, [])
+    }
+  }
+
+  useEffect(() => {
+    if (!isAuthorized) return
+    loadParents()
+  }, [isAuthorized])
 
   const filteredParents = parents.filter(parent =>
     parent.firstName.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -124,21 +92,29 @@ export default function ParentsPage() {
 
   const handleApproveParent = async (parentId: string) => {
     try {
-      setParents(prev => prev.map(p => 
-        p.id === parentId ? { ...p, isApproved: true } : p
-      ))
+      const res = await fetch(`/api/parents/${parentId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isApproved: true }),
+      })
+      if (!res.ok) throw new Error(`Failed to approve (${res.status})`)
       toast.success('Parent approved successfully')
-    } catch (error) {
-      toast.error('Failed to approve parent')
+      await loadParents()
+    } catch (error: any) {
+      toast.error(error?.message || 'Failed to approve parent')
     }
   }
 
   const handleRejectParent = async (parentId: string) => {
     try {
-      setParents(prev => prev.filter(p => p.id !== parentId))
+      const res = await fetch(`/api/parents/${parentId}`, {
+        method: 'DELETE',
+      })
+      if (!res.ok) throw new Error(`Failed to reject (${res.status})`)
       toast.success('Parent rejected and removed')
-    } catch (error) {
-      toast.error('Failed to reject parent')
+      await loadParents()
+    } catch (error: any) {
+      toast.error(error?.message || 'Failed to reject parent')
     }
   }
 
@@ -256,7 +232,7 @@ export default function ParentsPage() {
                       <TableCell>
                         <div className="flex items-center space-x-1">
                           <GraduationCap className="h-4 w-4 text-gray-400" />
-                          <span>{parent.students || 0}</span>
+                          <span>{parent.studentCount || 0}</span>
                         </div>
                       </TableCell>
                       <TableCell>{new Date(parent.createdAt).toLocaleDateString()}</TableCell>
@@ -350,7 +326,7 @@ export default function ParentsPage() {
                       <TableCell>
                         <div className="flex items-center space-x-1">
                           <GraduationCap className="h-4 w-4 text-gray-400" />
-                          <span>{parent.students || 0}</span>
+                          <span>{parent.studentCount || 0}</span>
                         </div>
                       </TableCell>
                       <TableCell>
@@ -433,7 +409,7 @@ export default function ParentsPage() {
                 
                 <div>
                   <label className="text-sm font-medium text-gray-500">Linked Students</label>
-                  <p className="text-sm">{selectedParent.students || 0} students</p>
+                  <p className="text-sm">{selectedParent.studentCount || 0} students</p>
                 </div>
               </div>
             )}

@@ -89,74 +89,42 @@ export default function SubmissionsPage() {
     targetId: '',
   })
 
-  // Mock data - in real app, this would come from API
+  const loadSubmissions = async () => {
+    try {
+      const res = await fetch('/api/submissions')
+      if (!res.ok) throw new Error(`Failed to load (${res.status})`)
+      const data = await res.json()
+      setSubmissions(data)
+    } catch (e) {
+      console.error(e)
+      toast.error('Failed to load submissions')
+    }
+  }
+
+  const loadClasses = async () => {
+    try {
+      const res = await fetch('/api/classes')
+      if (!res.ok) return
+      const data = await res.json()
+      // /api/classes returns an array directly
+      const list = Array.isArray(data) ? data : (data?.data || [])
+      setClasses(
+        list.map((c: any) => ({
+          id: c.id,
+          name: c.name,
+          grade: String(c.form ?? ''),
+          section: c.stream ?? '',
+        }))
+      )
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
   useEffect(() => {
-    const mockSubmissions: Submission[] = [
-      {
-        id: '1',
-        type: 'ANNOUNCEMENT',
-        title: 'Science Fair Next Week',
-        content: 'The annual science fair will be held next week. All students are encouraged to participate with their projects.',
-        targetAudience: 'ALL',
-        status: 'PENDING_APPROVAL',
-        submittedAt: '2024-03-15T10:30:00Z',
-      },
-      {
-        id: '2',
-        type: 'EVENT',
-        title: 'Parent-Teacher Meeting',
-        content: 'Scheduled parent-teacher meeting to discuss student progress and performance.',
-        targetAudience: 'SPECIFIC_CLASS',
-        targetId: 'class1',
-        status: 'APPROVED',
-        submittedAt: '2024-03-14T14:20:00Z',
-        reviewedAt: '2024-03-15T09:00:00Z',
-      },
-      {
-        id: '3',
-        type: 'PERFORMANCE',
-        title: 'Math Test Results - Grade 5',
-        content: 'Math test results for Grade 5 students have been recorded and are ready for review.',
-        targetAudience: 'SPECIFIC_CLASS',
-        targetId: 'class1',
-        status: 'DRAFT',
-        submittedAt: '2024-03-13T11:45:00Z',
-      },
-      {
-        id: '4',
-        type: 'ANNOUNCEMENT',
-        title: 'Holiday Schedule Update',
-        content: 'Updated holiday schedule for the upcoming month has been prepared.',
-        targetAudience: 'ALL',
-        status: 'REJECTED',
-        submittedAt: '2024-03-12T16:30:00Z',
-        reviewedAt: '2024-03-13T10:00:00Z',
-        rejectionReason: 'Please include specific dates and official holidays only',
-      },
-      {
-        id: '5',
-        type: 'ATTENDANCE',
-        title: 'Daily Attendance - Grade 5-A',
-        content: 'Daily attendance records for Grade 5-A students for the current week.',
-        targetAudience: 'SPECIFIC_CLASS',
-        targetId: 'class1',
-        status: 'APPROVED',
-        submittedAt: '2024-03-15T08:00:00Z',
-        reviewedAt: '2024-03-15T08:30:00Z',
-      },
-    ]
-
-    const mockClasses: Class[] = [
-      { id: 'class1', name: 'Grade 5-A', grade: '5', section: 'A' },
-      { id: 'class2', name: 'Grade 6-B', grade: '6', section: 'B' },
-    ]
-
-    setTimeout(() => {
-      setSubmissions(mockSubmissions)
-      setClasses(mockClasses)
-      setIsLoading(false)
-    }, 1000)
-  }, [])
+    if (!isAuthorized) return
+    Promise.all([loadSubmissions(), loadClasses()]).finally(() => setIsLoading(false))
+  }, [isAuthorized])
 
   const filteredSubmissions = submissions.filter(submission => {
     const matchesSearch = submission.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -173,48 +141,68 @@ export default function SubmissionsPage() {
   const approvedSubmissions = filteredSubmissions.filter(s => s.status === 'APPROVED')
   const rejectedSubmissions = filteredSubmissions.filter(s => s.status === 'REJECTED')
 
-  const handleSubmitSubmission = async () => {
+  const handleSubmitSubmission = async (submitNow = false) => {
     try {
       if (!formData.type || !formData.title || !formData.content || !formData.targetAudience) {
         toast.error('Please fill in all required fields')
         return
       }
-
-      // Mock API call
-      const newSubmission: Submission = {
-        id: Date.now().toString(),
-        type: formData.type as any,
-        title: formData.title,
-        content: formData.content,
-        targetAudience: formData.targetAudience as any,
-        targetId: formData.targetId || undefined,
-        status: 'DRAFT',
-        submittedAt: new Date().toISOString(),
-      }
-
-      setSubmissions(prev => [newSubmission, ...prev])
-      setIsCreateDialogOpen(false)
-      setFormData({
-        type: '',
-        title: '',
-        content: '',
-        targetAudience: '',
-        targetId: '',
+      const res = await fetch('/api/submissions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: formData.type,
+          title: formData.title,
+          content: formData.content,
+          targetAudience: formData.targetAudience,
+          targetId: formData.targetId || undefined,
+          submitNow,
+        }),
       })
-      toast.success('Submission created successfully')
-    } catch (error) {
-      toast.error('Failed to create submission')
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || `Failed (${res.status})`)
+      }
+      const created: Submission = await res.json()
+      setSubmissions(prev => [created, ...prev])
+      setIsCreateDialogOpen(false)
+      setFormData({ type: '', title: '', content: '', targetAudience: '', targetId: '' })
+      toast.success(submitNow ? 'Submission sent for approval' : 'Draft saved')
+    } catch (error: any) {
+      toast.error(error?.message || 'Failed to create submission')
     }
   }
 
   const handleSubmitForApproval = async (submissionId: string) => {
     try {
-      setSubmissions(prev => prev.map(s => 
-        s.id === submissionId ? { ...s, status: 'PENDING_APPROVAL' } : s
-      ))
+      const res = await fetch(`/api/submissions/${submissionId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ submitNow: true }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || `Failed (${res.status})`)
+      }
+      const updated: Submission = await res.json()
+      setSubmissions(prev => prev.map(s => (s.id === submissionId ? updated : s)))
       toast.success('Submission submitted for approval')
-    } catch (error) {
-      toast.error('Failed to submit for approval')
+    } catch (error: any) {
+      toast.error(error?.message || 'Failed to submit for approval')
+    }
+  }
+
+  const handleDeleteSubmission = async (submissionId: string) => {
+    try {
+      const res = await fetch(`/api/submissions/${submissionId}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || `Failed (${res.status})`)
+      }
+      setSubmissions(prev => prev.filter(s => s.id !== submissionId))
+      toast.success('Submission deleted')
+    } catch (error: any) {
+      toast.error(error?.message || 'Failed to delete submission')
     }
   }
 
@@ -472,7 +460,8 @@ export default function SubmissionsPage() {
                 <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
                   Cancel
                 </Button>
-                <Button onClick={handleSubmitSubmission}>Create Submission</Button>
+                <Button variant="secondary" onClick={() => handleSubmitSubmission(false)}>Save as Draft</Button>
+                <Button onClick={() => handleSubmitSubmission(true)}>Submit for Approval</Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>

@@ -1,10 +1,11 @@
 'use client'
 
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import { DashboardLayout, PageHeader } from '@/components/layout/dashboard-layout'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { useRequireAuth } from '@/hooks/use-auth'
+import { toast } from 'sonner'
 import {
   Users,
   GraduationCap,
@@ -18,68 +19,183 @@ import {
   Award,
 } from 'lucide-react'
 
+interface Student {
+  id: string
+  firstName: string
+  lastName: string
+  registrationNumber: string
+  classId: string | null
+  className: string | null
+}
+
+interface Attendance {
+  id: string
+  studentId: string
+  date: string
+  status: string
+}
+
+interface Performance {
+  id: string
+  studentId: string
+  subject: string
+  score: number
+  maxScore: number
+  grade: string
+  assessmentDate: string
+}
+
+interface Result {
+  id: string
+  studentId: string
+  examType: string
+  term: string
+  academicYear: string
+  totalMarks: number
+  maxTotalMarks: number
+  percentage: number
+  grade: string
+  publishedAt: string
+}
+
 export default function ParentDashboard() {
   const { user, isAuthorized } = useRequireAuth('PARENT')
+  const [isLoading, setIsLoading] = useState(true)
+  const [children, setChildren] = useState<Student[]>([])
+  const [attendance, setAttendance] = useState<Attendance[]>([])
+  const [performance, setPerformance] = useState<Performance[]>([])
+  const [results, setResults] = useState<Result[]>([])
+  const [notifications, setNotifications] = useState<any[]>([])
 
-  if (!isAuthorized) {
-    return <div>Loading...</div>
+  const loadData = async () => {
+    try {
+      // Fetch parent's children
+      const parentsRes = await fetch('/api/parents')
+      if (!parentsRes.ok) throw new Error('Failed to load parent data')
+      const parentsData = await parentsRes.json()
+      const parentData = parentsData.find((p: any) => p.email === user?.email)
+      
+      if (!parentData) {
+        throw new Error('Parent data not found')
+      }
+
+      // Fetch children
+      const studentsRes = await fetch('/api/students')
+      if (!studentsRes.ok) throw new Error('Failed to load students')
+      const allStudents = await studentsRes.json()
+      const parentChildren = allStudents.filter((s: any) => s.parentId === parentData.id)
+      setChildren(parentChildren)
+
+      // Fetch attendance for children
+      if (parentChildren.length > 0) {
+        const attendancePromises = parentChildren.map((child: Student) =>
+          fetch(`/api/attendance?studentId=${child.id}`).then(res => res.json())
+        )
+        const attendanceData = await Promise.all(attendancePromises)
+        setAttendance(attendanceData.flat())
+
+        // Fetch performance for children
+        const performancePromises = parentChildren.map((child: Student) =>
+          fetch(`/api/performance?studentId=${child.id}`).then(res => res.json())
+        )
+        const performanceData = await Promise.all(performancePromises)
+        setPerformance(performanceData.flat())
+
+        // Fetch results for children
+        const resultsPromises = parentChildren.map((child: Student) =>
+          fetch(`/api/results?studentId=${child.id}`).then(res => res.json())
+        )
+        const resultsData = await Promise.all(resultsPromises)
+        setResults(resultsData.flat())
+      }
+
+      // Fetch notifications
+      const notifRes = await fetch('/api/notifications')
+      if (notifRes.ok) {
+        const notifData = await notifRes.json()
+        setNotifications(notifData)
+      }
+    } catch (error: any) {
+      console.error('Error loading dashboard data:', error)
+      toast.error(error?.message || 'Failed to load dashboard data')
+    } finally {
+      setIsLoading(false)
+    }
   }
 
-  // Mock data - in real app, this would come from API
+  useEffect(() => {
+    if (!isAuthorized || !user) return
+    loadData()
+  }, [isAuthorized, user])
+
+  // Calculate stats
+  const totalChildren = children.length
+  const todayAttendance = attendance.filter(a => a.date === new Date().toISOString().split('T')[0] && a.status === 'PRESENT').length
+  const averagePerformance = performance.length > 0 
+    ? Math.round(performance.reduce((sum, p) => sum + (p.score / p.maxScore) * 100, 0) / performance.length)
+    : 0
+  const unreadNotifications = notifications.filter((n: any) => !n.isRead).length
+
   const stats = {
-    totalChildren: 2,
-    todayAttendance: 2,
-    averagePerformance: 88.5,
-    unreadNotifications: 3,
-    upcomingEvents: 2,
-    recentResults: 1,
-    pendingAnnouncements: 4,
+    totalChildren,
+    todayAttendance,
+    averagePerformance,
+    unreadNotifications,
   }
 
-  const children = [
-    {
-      id: '1',
-      name: 'Alice Johnson',
-      class: 'Grade 5-A',
-      attendance: 'Present',
-      performance: 92,
-      photo: '/api/placeholder/40/40',
-    },
-    {
-      id: '2',
-      name: 'Bob Johnson',
-      class: 'Grade 3-B',
-      attendance: 'Present',
-      performance: 85,
-      photo: '/api/placeholder/40/40',
-    },
-  ]
+  const getChildAttendance = (childId: string) => {
+    const childAttendance = attendance.filter(a => a.studentId === childId)
+    if (childAttendance.length === 0) return 'N/A'
+    const today = new Date().toISOString().split('T')[0]
+    const todayRecord = childAttendance.find(a => a.date === today)
+    return todayRecord ? todayRecord.status : 'N/A'
+  }
 
+  const getChildPerformance = (childId: string) => {
+    const childPerformance = performance.filter(p => p.studentId === childId)
+    if (childPerformance.length === 0) return 0
+    return Math.round(childPerformance.reduce((sum, p) => sum + (p.score / p.maxScore) * 100, 0) / childPerformance.length)
+  }
+
+  // Create recent activity from fetched data
   const recentActivity = [
-    { id: 1, type: 'attendance', description: 'Alice marked present today', time: '2 hours ago', child: 'Alice' },
-    { id: 2, type: 'performance', description: 'Bob scored 85% in Math test', time: '1 day ago', child: 'Bob' },
-    { id: 3, type: 'announcement', description: 'Science Fair next week', time: '2 days ago', child: 'All' },
-    { id: 4, type: 'result', description: 'Alice midterm results published', time: '3 days ago', child: 'Alice' },
-  ]
+    ...attendance.slice(0, 3).map(a => ({
+      id: a.id,
+      type: 'attendance',
+      description: `${children.find(c => c.id === a.studentId)?.firstName || 'Student'} marked ${(a.status || 'present').toLowerCase()}`,
+      time: new Date(a.date).toLocaleDateString(),
+      child: children.find(c => c.id === a.studentId)?.firstName || 'Student',
+    })),
+    ...performance.slice(0, 2).map(p => ({
+      id: p.id,
+      type: 'performance',
+      description: `${children.find(c => c.id === p.studentId)?.firstName || 'Student'} scored ${Math.round((p.score / p.maxScore) * 100)}% in ${p.subject}`,
+      time: new Date(p.assessmentDate).toLocaleDateString(),
+      child: children.find(c => c.id === p.studentId)?.firstName || 'Student',
+    })),
+  ].slice(0, 5)
 
-  const upcomingEvents = [
-    { id: 1, title: 'Science Fair', date: '2024-03-25', time: '9:00 AM', type: 'academic' },
-    { id: 2, title: 'Parent-Teacher Meeting', date: '2024-03-28', time: '2:00 PM', type: 'meeting' },
-  ]
+  // Create upcoming events from notifications
+  const upcomingEvents = notifications
+    .filter(n => n.type === 'EVENT')
+    .slice(0, 2)
+    .map(n => ({
+      id: n.id,
+      title: n.title,
+      date: new Date(n.createdAt).toISOString().split('T')[0],
+      time: '9:00 AM',
+      type: 'event',
+    }))
 
-  const recentResults = [
-    {
-      id: '1',
-      studentName: 'Alice Johnson',
-      examType: 'Midterm',
-      term: 'Term 2',
-      totalMarks: 450,
-      maxTotalMarks: 500,
-      percentage: 90,
-      grade: 'A',
-      date: '2024-03-10',
-    },
-  ]
+  if (isLoading) {
+    return (
+      <DashboardLayout title="Parent Dashboard" subtitle="Monitor your children's progress and activities">
+        <div className="flex items-center justify-center py-8">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        </div>
+      </DashboardLayout>
+    )
+  }
 
   const StatCard = ({ title, value, icon: Icon, description, trend }: any) => (
     <Card>
@@ -151,16 +267,16 @@ export default function ParentDashboard() {
                       <GraduationCap className="h-6 w-6 text-blue-600" />
                     </div>
                     <div className="flex-1">
-                      <h3 className="font-semibold">{child.name}</h3>
-                      <p className="text-sm text-gray-500">{child.class}</p>
+                      <h3 className="font-semibold">{child.firstName} {child.lastName}</h3>
+                      <p className="text-sm text-gray-500">{child.className || 'No class assigned'}</p>
                       <div className="flex items-center space-x-4 mt-2">
                         <div className="flex items-center space-x-1">
                           <CheckCircle className="h-4 w-4 text-green-500" />
-                          <span className="text-sm">{child.attendance}</span>
+                          <span className="text-sm">{getChildAttendance(child.id)}</span>
                         </div>
                         <div className="flex items-center space-x-1">
                           <Award className="h-4 w-4 text-blue-500" />
-                          <span className="text-sm">{child.performance}%</span>
+                          <span className="text-sm">{getChildPerformance(child.id)}%</span>
                         </div>
                       </div>
                     </div>
@@ -209,11 +325,11 @@ export default function ParentDashboard() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {recentResults.map((result) => (
+              {results.slice(0, 5).map((result: Result) => (
                 <div key={result.id} className="p-4 border rounded-lg">
                   <div className="flex items-center justify-between">
                     <div>
-                      <h4 className="font-semibold">{result.studentName}</h4>
+                      <h4 className="font-semibold">{children.find(c => c.id === result.studentId)?.firstName || 'Student'} {children.find(c => c.id === result.studentId)?.lastName || ''}</h4>
                       <p className="text-sm text-gray-500">{result.examType} - {result.term}</p>
                     </div>
                     <div className="text-right">
@@ -224,11 +340,14 @@ export default function ParentDashboard() {
                   <div className="mt-2">
                     <div className="flex items-center justify-between text-sm text-gray-500">
                       <span>{result.totalMarks}/{result.maxTotalMarks} marks</span>
-                      <span>{new Date(result.date).toLocaleDateString()}</span>
+                      <span>{new Date(result.publishedAt).toLocaleDateString()}</span>
                     </div>
                   </div>
                 </div>
               ))}
+              {results.length === 0 && (
+                <p className="text-sm text-gray-500 text-center py-4">No results available yet</p>
+              )}
             </div>
           </CardContent>
         </Card>
