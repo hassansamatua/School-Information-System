@@ -97,48 +97,46 @@ export default function ClassesPage() {
 
   // Ensure class name is always in sync with form and stream
   useEffect(() => {
-    if (formData.form && formData.stream) {
-      const expectedName = `Form ${formData.form}${formData.stream}`
-      if (formData.name !== expectedName) {
-        setFormData(prev => ({ ...prev, name: expectedName }))
-      }
-    }
+    setFormData(prev => ({
+      ...prev,
+      name: `Form ${prev.form}${prev.stream}`
+    }))
   }, [formData.form, formData.stream])
 
   // Fetch classes and teachers from API
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        // Fetch classes
-        const classesResponse = await fetch('/api/classes')
-        if (classesResponse.ok) {
-          const classesData = await classesResponse.json()
-          // Handle both direct array and wrapped object responses
-          setClasses(Array.isArray(classesData) ? classesData : classesData.data || [])
-        }
-
-        // Fetch teachers for assignment
-        const teachersResponse = await fetch('/api/teachers')
-        if (teachersResponse.ok) {
-          const teachersData = await teachersResponse.json()
-          setTeachers(Array.isArray(teachersData) ? teachersData : teachersData.data || [])
-        }
-      } catch (error) {
-        console.error('Error fetching data:', error)
-        toast.error('Failed to load data')
-      } finally {
-        setIsLoading(false)
+  const fetchData = async () => {
+    try {
+      // Fetch classes
+      const classesResponse = await fetch('/api/classes')
+      if (classesResponse.ok) {
+        const classesData = await classesResponse.json()
+        // Handle both direct array and wrapped object responses
+        setClasses(Array.isArray(classesData) ? classesData : classesData.data || [])
       }
-    }
 
+      // Fetch teachers for assignment
+      const teachersResponse = await fetch('/api/teachers')
+      if (teachersResponse.ok) {
+        const teachersData = await teachersResponse.json()
+        setTeachers(Array.isArray(teachersData) ? teachersData : teachersData.data || [])
+      }
+    } catch (error) {
+      console.error('Error fetching data:', error)
+      toast.error('Failed to load data')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  useEffect(() => {
     fetchData()
   }, [])
 
   const filteredClasses = classes.filter(cls =>
-    cls.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (cls.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
     cls.form.toString().includes(searchQuery.toLowerCase()) ||
-    cls.stream.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    cls.teacherName?.toLowerCase().includes(searchQuery.toLowerCase())
+    (cls.stream || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (cls.teacherName || '').toLowerCase().includes(searchQuery.toLowerCase())
   )
 
   const activeClasses = filteredClasses.filter(c => c.isActive)
@@ -221,9 +219,9 @@ export default function ClassesPage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          form: formData.form,
-          stream: formData.stream,
-          maxStudents: formData.maxStudents,
+          form: formData.form ?? 1,
+          stream: formData.stream ?? 'A',
+          maxStudents: formData.maxStudents ?? 40,
           teacherId: formData.teacherId || null,
           isActive: selectedClass.isActive,
         }),
@@ -251,7 +249,8 @@ export default function ClassesPage() {
       }
 
       const updatedClass = await response.json()
-      setClasses(prev => prev.map(c => c.id === selectedClass.id ? updatedClass : c))
+      // Refresh data from database to get updated teacher information
+      await fetchData()
       setIsEditDialogOpen(false)
       setSelectedClass(null)
       setFormData({
@@ -262,7 +261,6 @@ export default function ClassesPage() {
         maxStudents: 40,
       })
       
-      // Check if this was a fallback response
       if (updatedClass.fallback) {
         toast.warning('Database unavailable - Class updated locally')
       } else {
@@ -394,7 +392,7 @@ export default function ClassesPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {filteredClasses.reduce((sum, cls) => sum + cls.currentStudents, 0)}
+                {filteredClasses.reduce((sum, cls) => sum + (cls.currentStudents || 0), 0)}
               </div>
               <p className="text-xs text-muted-foreground">Enrolled students</p>
             </CardContent>
@@ -551,12 +549,13 @@ export default function ClassesPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredClasses.map((cls) => {
+                  {filteredClasses.map((cls, index) => {
+                    if (!cls.id) return null
                     const occupancyPercentage = getOccupancyPercentage(cls.currentStudents, cls.maxStudents)
                     const occupancyColor = getOccupancyColor(occupancyPercentage)
                     
                     return (
-                      <TableRow key={cls.id}>
+                      <TableRow key={cls.id || `class-${index}`}>
                         <TableCell>
                           <div className="flex items-center space-x-2">
                             <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center">

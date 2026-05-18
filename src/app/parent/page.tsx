@@ -159,15 +159,15 @@ export default function ParentDashboard() {
 
   // Create recent activity from fetched data
   const recentActivity = [
-    ...attendance.slice(0, 3).map(a => ({
-      id: a.id,
+    ...attendance.slice(0, 3).map((a, index) => ({
+      id: a.id || `attendance-${index}`,
       type: 'attendance',
       description: `${children.find(c => c.id === a.studentId)?.firstName || 'Student'} marked ${(a.status || 'present').toLowerCase()}`,
       time: new Date(a.date).toLocaleDateString(),
       child: children.find(c => c.id === a.studentId)?.firstName || 'Student',
     })),
-    ...performance.slice(0, 2).map(p => ({
-      id: p.id,
+    ...performance.slice(0, 2).map((p, index) => ({
+      id: p.id || `performance-${index}`,
       type: 'performance',
       description: `${children.find(c => c.id === p.studentId)?.firstName || 'Student'} scored ${Math.round((p.score / p.maxScore) * 100)}% in ${p.subject}`,
       time: new Date(p.assessmentDate).toLocaleDateString(),
@@ -325,8 +325,8 @@ export default function ParentDashboard() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {results.slice(0, 5).map((result: Result) => (
-                <div key={result.id} className="p-4 border rounded-lg">
+              {results.slice(0, 5).map((result: Result, index) => (
+                <div key={result.id || `result-${index}`} className="p-4 border rounded-lg">
                   <div className="flex items-center justify-between">
                     <div>
                       <h4 className="font-semibold">{children.find(c => c.id === result.studentId)?.firstName || 'Student'} {children.find(c => c.id === result.studentId)?.lastName || ''}</h4>

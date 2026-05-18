@@ -55,19 +55,21 @@ interface Submission {
   title: string
   content: string
   targetAudience: 'ALL' | 'TEACHERS' | 'PARENTS' | 'SPECIFIC_CLASS' | 'SPECIFIC_STUDENT'
-  targetId?: string
-  status: 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED'
+  targetId: string | null
+  status: 'DRAFT' | 'PENDING' | 'APPROVED' | 'REJECTED'
+  submittedBy: string
   submittedAt: string
-  reviewedAt?: string
-  rejectionReason?: string
-  data?: any
+  reviewedAt: string | null
+  rejectionReason: string | null
+  data: any
 }
 
 interface Class {
   id: string
   name: string
-  grade: string
-  section: string
+  form: number | null
+  stream: string | null
+  teacherId: string | null
 }
 
 export default function SubmissionsPage() {
@@ -91,10 +93,30 @@ export default function SubmissionsPage() {
 
   const loadSubmissions = async () => {
     try {
+      // Fetch teacher's data - try to find by userId if available, otherwise by email
+      const teachersRes = await fetch('/api/teachers')
+      if (!teachersRes.ok) throw new Error('Failed to load teacher data')
+      const teachersResponse = await teachersRes.json()
+      const teachersData = Array.isArray(teachersResponse) ? teachersResponse : (teachersResponse.data || [])
+      
+      // Try to find teacher by userId first, then by email
+      let teacherData = teachersData.find((t: any) => t.userId === user?.id)
+      if (!teacherData) {
+        teacherData = teachersData.find((t: any) => t.email === user?.email)
+      }
+      
+      if (!teacherData) {
+        console.warn('Teacher data not found for user:', user?.email, 'userId:', user?.id)
+        setSubmissions([])
+        return
+      }
+
+      // Fetch submissions and filter by teacher's userId
       const res = await fetch('/api/submissions')
       if (!res.ok) throw new Error(`Failed to load (${res.status})`)
       const data = await res.json()
-      setSubmissions(data)
+      const teacherSubmissions = data.filter((s: any) => s.submittedBy === teacherData.userId)
+      setSubmissions(teacherSubmissions)
     } catch (e) {
       console.error(e)
       toast.error('Failed to load submissions')
@@ -103,19 +125,31 @@ export default function SubmissionsPage() {
 
   const loadClasses = async () => {
     try {
+      // Fetch teacher's data - try to find by userId if available, otherwise by email
+      const teachersRes = await fetch('/api/teachers')
+      if (!teachersRes.ok) throw new Error('Failed to load teacher data')
+      const teachersResponse = await teachersRes.json()
+      const teachersData = Array.isArray(teachersResponse) ? teachersResponse : (teachersResponse.data || [])
+      
+      // Try to find teacher by userId first, then by email
+      let teacherData = teachersData.find((t: any) => t.userId === user?.id)
+      if (!teacherData) {
+        teacherData = teachersData.find((t: any) => t.email === user?.email)
+      }
+      
+      if (!teacherData) {
+        console.warn('Teacher data not found for user:', user?.email, 'userId:', user?.id)
+        setClasses([])
+        return
+      }
+
+      // Fetch classes for this teacher
       const res = await fetch('/api/classes')
       if (!res.ok) return
       const data = await res.json()
-      // /api/classes returns an array directly
       const list = Array.isArray(data) ? data : (data?.data || [])
-      setClasses(
-        list.map((c: any) => ({
-          id: c.id,
-          name: c.name,
-          grade: String(c.form ?? ''),
-          section: c.stream ?? '',
-        }))
-      )
+      const teacherClasses = list.filter((c: any) => c.teacherId === teacherData.id)
+      setClasses(teacherClasses)
     } catch (e) {
       console.error(e)
     }
@@ -137,7 +171,7 @@ export default function SubmissionsPage() {
   })
 
   const draftSubmissions = filteredSubmissions.filter(s => s.status === 'DRAFT')
-  const pendingSubmissions = filteredSubmissions.filter(s => s.status === 'PENDING_APPROVAL')
+  const pendingSubmissions = filteredSubmissions.filter(s => s.status === 'PENDING')
   const approvedSubmissions = filteredSubmissions.filter(s => s.status === 'APPROVED')
   const rejectedSubmissions = filteredSubmissions.filter(s => s.status === 'REJECTED')
 
@@ -230,7 +264,7 @@ export default function SubmissionsPage() {
     switch (status) {
       case 'DRAFT':
         return <Badge variant="outline">Draft</Badge>
-      case 'PENDING_APPROVAL':
+      case 'PENDING':
         return <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">Pending</Badge>
       case 'APPROVED':
         return <Badge variant="default" className="bg-green-100 text-green-800">Approved</Badge>
@@ -332,7 +366,7 @@ export default function SubmissionsPage() {
               <SelectContent>
                 <SelectItem value="all">All Status</SelectItem>
                 <SelectItem value="DRAFT">Draft</SelectItem>
-                <SelectItem value="PENDING_APPROVAL">Pending</SelectItem>
+                <SelectItem value="PENDING">Pending</SelectItem>
                 <SelectItem value="APPROVED">Approved</SelectItem>
                 <SelectItem value="REJECTED">Rejected</SelectItem>
               </SelectContent>

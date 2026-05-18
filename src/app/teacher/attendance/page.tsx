@@ -51,29 +51,26 @@ interface Student {
   registrationNumber: string
   firstName: string
   lastName: string
-  classId: string
-  className: string
+  classId: string | null
+  className: string | null
 }
 
 interface AttendanceRecord {
   id: string
   studentId: string
-  studentName: string
-  registrationNumber: string
   classId: string
-  className: string
   date: string
   status: 'PRESENT' | 'ABSENT' | 'LATE' | 'EXCUSED'
-  remarks?: string
-  recordedAt: string
+  remarks: string | null
+  createdAt: string
 }
 
 interface Class {
   id: string
   name: string
-  form: number
-  stream: string
-  studentCount: number
+  form: number | null
+  stream: string | null
+  teacherId: string | null
 }
 
 export default function AttendancePage() {
@@ -88,66 +85,61 @@ export default function AttendancePage() {
   const [isMarkAttendanceDialogOpen, setIsMarkAttendanceDialogOpen] = useState(false)
   const [attendanceData, setAttendanceData] = useState<Record<string, { status: string; remarks: string }>>({})
 
-  // Mock data - in real app, this would come from API
-  useEffect(() => {
-    const mockStudents: Student[] = [
-      { id: '1', registrationNumber: 'REG2024001', firstName: 'Alice', lastName: 'Johnson', classId: '1', className: 'Grade 5-A' },
-      { id: '2', registrationNumber: 'REG2024002', firstName: 'Bob', lastName: 'Smith', classId: '1', className: 'Grade 5-A' },
-      { id: '3', registrationNumber: 'REG2024003', firstName: 'Charlie', lastName: 'Brown', classId: '1', className: 'Grade 5-A' },
-      { id: '4', registrationNumber: 'REG2024004', firstName: 'Diana', lastName: 'Davis', classId: '2', className: 'Grade 6-B' },
-      { id: '5', registrationNumber: 'REG2024005', firstName: 'Edward', lastName: 'Wilson', classId: '2', className: 'Grade 6-B' },
-    ]
+  const loadData = async () => {
+    try {
+      // Fetch teacher's data - try to find by userId if available, otherwise by email
+      const teachersRes = await fetch('/api/teachers')
+      if (!teachersRes.ok) throw new Error('Failed to load teacher data')
+      const teachersResponse = await teachersRes.json()
+      const teachersData = Array.isArray(teachersResponse) ? teachersResponse : (teachersResponse.data || [])
+      
+      // Try to find teacher by userId first, then by email
+      let teacherData = teachersData.find((t: any) => t.userId === user?.id)
+      if (!teacherData) {
+        teacherData = teachersData.find((t: any) => t.email === user?.email)
+      }
+      
+      if (!teacherData) {
+        console.warn('Teacher data not found for user:', user?.email, 'userId:', user?.id)
+        setClasses([])
+        setStudents([])
+        setAttendanceRecords([])
+        setIsLoading(false)
+        return
+      }
 
-    const mockClasses: Class[] = [
-      { id: '1', name: 'Form 1A', form: 1, stream: 'A', studentCount: 3 },
-      { id: '2', name: 'Form 2B', form: 2, stream: 'B', studentCount: 2 },
-    ]
+      // Fetch classes for this teacher
+      const classesRes = await fetch('/api/classes')
+      if (!classesRes.ok) throw new Error('Failed to load classes')
+      const allClasses = await classesRes.json()
+      const teacherClasses = allClasses.filter((c: any) => c.teacherId === teacherData.id)
+      setClasses(teacherClasses)
 
-    const mockAttendanceRecords: AttendanceRecord[] = [
-      {
-        id: '1',
-        studentId: '1',
-        studentName: 'Alice Johnson',
-        registrationNumber: 'REG2024001',
-        classId: '1',
-        className: 'Form 1A',
-        date: '2024-03-15',
-        status: 'PRESENT',
-        recordedAt: '2024-03-15T08:30:00Z',
-      },
-      {
-        id: '2',
-        studentId: '2',
-        studentName: 'Bob Smith',
-        registrationNumber: 'REG2024002',
-        classId: '1',
-        className: 'Form 1A',
-        date: '2024-03-15',
-        status: 'ABSENT',
-        remarks: 'Sick leave',
-        recordedAt: '2024-03-15T08:30:00Z',
-      },
-      {
-        id: '3',
-        studentId: '3',
-        studentName: 'Charlie Brown',
-        registrationNumber: 'REG2024003',
-        classId: '1',
-        className: 'Form 1A',
-        date: '2024-03-15',
-        status: 'LATE',
-        remarks: 'Arrived 15 minutes late',
-        recordedAt: '2024-03-15T08:45:00Z',
-      },
-    ]
+      // Fetch students in teacher's classes
+      const studentsRes = await fetch('/api/students')
+      if (!studentsRes.ok) throw new Error('Failed to load students')
+      const allStudents = await studentsRes.json()
+      const teacherStudents = allStudents.filter((s: any) => teacherClasses.some((c: any) => c.id === s.classId))
+      setStudents(teacherStudents)
 
-    setTimeout(() => {
-      setStudents(mockStudents)
-      setClasses(mockClasses)
-      setAttendanceRecords(mockAttendanceRecords)
+      // Fetch attendance records for teacher's classes
+      const attendancePromises = teacherClasses.map((c: any) =>
+        fetch(`/api/attendance?classId=${c.id}`).then(res => res.json())
+      )
+      const attendanceResponses = await Promise.all(attendancePromises)
+      const attendanceData = attendanceResponses.map((res: any) => res.data || []).flat()
+      setAttendanceRecords(attendanceData)
+    } catch (error: any) {
+      console.error('Error loading attendance data:', error)
+    } finally {
       setIsLoading(false)
-    }, 1000)
-  }, [])
+    }
+  }
+
+  useEffect(() => {
+    if (!isAuthorized || !user) return
+    loadData()
+  }, [isAuthorized, user])
 
   const filteredStudents = students.filter(student => {
     const matchesClass = !selectedClass || student.classId === selectedClass
@@ -207,14 +199,11 @@ export default function AttendancePage() {
         return {
           id: Date.now().toString() + index,
           studentId: student.id,
-          studentName: `${student.firstName} ${student.lastName}`,
-          registrationNumber: student.registrationNumber,
-          classId: student.classId,
-          className: student.className,
+          classId: student.classId || '',
           date: selectedDate,
           status: data.status as 'PRESENT' | 'ABSENT' | 'LATE' | 'EXCUSED',
-          remarks: data.remarks,
-          recordedAt: new Date().toISOString(),
+          remarks: data.remarks || null,
+          createdAt: new Date().toISOString(),
         }
       })
       setAttendanceRecords((prev) => {
@@ -467,31 +456,35 @@ export default function AttendancePage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredAttendanceRecords.map((record) => (
-                    <TableRow key={record.id}>
-                      <TableCell>
-                        <div className="flex items-center space-x-2">
-                          <GraduationCap className="h-4 w-4 text-gray-400" />
-                          <span>{record.studentName}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>{record.registrationNumber}</TableCell>
-                      <TableCell>{getStatusBadge(record.status)}</TableCell>
-                      <TableCell>
-                        {record.remarks ? (
-                          <span className="text-sm text-gray-600">{record.remarks}</span>
-                        ) : (
-                          <span className="text-sm text-gray-400">No remarks</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center space-x-1">
-                          <Calendar className="h-4 w-4 text-gray-400" />
-                          <span>{new Date(record.recordedAt).toLocaleTimeString()}</span>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {filteredAttendanceRecords.map((record) => {
+                    const student = students.find(s => s.id === record.studentId)
+                    if (!student) return null
+                    return (
+                      <TableRow key={record.id}>
+                        <TableCell>
+                          <div className="flex items-center space-x-2">
+                            <GraduationCap className="h-4 w-4 text-gray-400" />
+                            <span>{student.firstName} {student.lastName}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>{student.registrationNumber}</TableCell>
+                        <TableCell>{getStatusBadge(record.status)}</TableCell>
+                        <TableCell>
+                          {record.remarks ? (
+                            <span className="text-sm text-gray-600">{record.remarks}</span>
+                          ) : (
+                            <span className="text-sm text-gray-400">No remarks</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center space-x-1">
+                            <Calendar className="h-4 w-4 text-gray-400" />
+                            <span>{new Date(record.createdAt).toLocaleTimeString()}</span>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
                 </TableBody>
               </Table>
             )}

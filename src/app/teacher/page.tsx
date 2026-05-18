@@ -1,6 +1,6 @@
 'use client'
 
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import { DashboardLayout, PageHeader } from '@/components/layout/dashboard-layout'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -19,36 +19,145 @@ import {
 
 export default function TeacherDashboard() {
   const { user, isAuthorized } = useRequireAuth('TEACHER')
+  const [isLoading, setIsLoading] = useState(true)
+  const [stats, setStats] = useState({
+    totalStudents: 0,
+    totalClasses: 0,
+    pendingApprovals: 0,
+    todayAttendance: 0,
+    averagePerformance: 0,
+    recentSubmissions: 0,
+    upcomingEvents: 0,
+    unreadNotifications: 0,
+  })
+  const [recentActivity, setRecentActivity] = useState<any[]>([])
+  const [upcomingEvents, setUpcomingEvents] = useState<any[]>([])
+  const [classes, setClasses] = useState<any[]>([])
+  const [submissions, setSubmissions] = useState<any[]>([])
+
+  const loadData = async () => {
+    try {
+      // Fetch teacher's data - try to find by userId if available, otherwise by email
+      const teachersRes = await fetch('/api/teachers')
+      if (!teachersRes.ok) throw new Error('Failed to load teacher data')
+      const teachersResponse = await teachersRes.json()
+      const teachersData = Array.isArray(teachersResponse) ? teachersResponse : (teachersResponse.data || [])
+      
+      // Try to find teacher by userId first, then by email
+      let teacherData = teachersData.find((t: any) => t.userId === user?.id)
+      if (!teacherData) {
+        teacherData = teachersData.find((t: any) => t.email === user?.email)
+      }
+      
+      if (!teacherData) {
+        console.warn('Teacher data not found for user:', user?.email, 'userId:', user?.id)
+        setStats({
+          totalStudents: 0,
+          totalClasses: 0,
+          pendingApprovals: 0,
+          todayAttendance: 0,
+          averagePerformance: 0,
+          recentSubmissions: 0,
+          upcomingEvents: 0,
+          unreadNotifications: 0,
+        })
+        setClasses([])
+        setSubmissions([])
+        setIsLoading(false)
+        return
+      }
+
+      // Fetch classes for this teacher
+      const classesRes = await fetch('/api/classes')
+      if (!classesRes.ok) throw new Error('Failed to load classes')
+      const allClasses = await classesRes.json()
+      const teacherClasses = allClasses.filter((c: any) => c.teacherId === teacherData.id)
+      setClasses(teacherClasses)
+
+      // Fetch students in teacher's classes
+      const studentsRes = await fetch('/api/students')
+      if (!studentsRes.ok) throw new Error('Failed to load students')
+      const allStudents = await studentsRes.json()
+      const teacherStudents = allStudents.filter((s: any) => teacherClasses.some((c: any) => c.id === s.classId))
+
+      // Fetch today's attendance
+      const today = new Date().toISOString().slice(0, 10)
+      const attendancePromises = teacherClasses.map((c: any) =>
+        fetch(`/api/attendance?classId=${c.id}&date=${today}`).then(res => res.json())
+      )
+      const attendanceResponses = await Promise.all(attendancePromises)
+      const attendanceData = attendanceResponses.map((res: any) => res.data || []).flat()
+      const presentToday = attendanceData.filter((a: any) => a.status === 'PRESENT').length
+
+      // Fetch performance data
+      const performancePromises = teacherClasses.map((c: any) =>
+        fetch(`/api/performance?classId=${c.id}`).then(res => res.json())
+      )
+      const performanceResponses = await Promise.all(performancePromises)
+      const performanceData = performanceResponses.map((res: any) => res.data || []).flat()
+      const avgPerformance = performanceData.length > 0
+        ? performanceData.reduce((sum: number, p: any) => sum + (p.score || 0), 0) / performanceData.length
+        : 0
+
+      // Fetch submissions
+      const submissionsRes = await fetch('/api/submissions')
+      if (submissionsRes.ok) {
+        const submissionsData = await submissionsRes.json()
+        const teacherSubmissions = submissionsData.filter((s: any) => s.submittedBy === teacherData.userId)
+        setSubmissions(teacherSubmissions)
+      }
+
+      // Fetch upcoming events
+      const eventsRes = await fetch('/api/events?upcoming=1')
+      if (eventsRes.ok) {
+        const eventsData = await eventsRes.json()
+        setUpcomingEvents(eventsData.slice(0, 3))
+      }
+
+      // Fetch notifications
+      const notificationsRes = await fetch('/api/notifications')
+      if (notificationsRes.ok) {
+        const notificationsData = await notificationsRes.json()
+        const unreadCount = notificationsData.filter((n: any) => !n.read && n.recipientId === teacherData.userId).length
+        setStats(prev => ({ ...prev, unreadNotifications: unreadCount }))
+      }
+
+      // Update stats
+      setStats({
+        totalStudents: teacherStudents.length,
+        totalClasses: teacherClasses.length,
+        pendingApprovals: submissions.filter((s: any) => s.status === 'PENDING').length,
+        todayAttendance: presentToday,
+        averagePerformance: avgPerformance,
+        recentSubmissions: submissions.filter((s: any) => {
+          const weekAgo = new Date()
+          weekAgo.setDate(weekAgo.getDate() - 7)
+          return new Date(s.createdAt) > weekAgo
+        }).length,
+        upcomingEvents: upcomingEvents.length,
+        unreadNotifications: stats.unreadNotifications,
+      })
+
+      // Mock recent activity (would need audit logs for real data)
+      setRecentActivity([
+        { id: 1, type: 'attendance', description: 'Recorded attendance for class', time: '2 hours ago' },
+        { id: 2, type: 'performance', description: 'Added performance scores', time: '3 hours ago' },
+      ])
+    } catch (error: any) {
+      console.error('Error loading teacher data:', error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!isAuthorized || !user) return
+    loadData()
+  }, [isAuthorized, user])
 
   if (!isAuthorized) {
     return <div>Loading...</div>
   }
-
-  // Mock data - in real app, this would come from API
-  const stats = {
-    totalStudents: 85,
-    totalClasses: 3,
-    pendingApprovals: 2,
-    todayAttendance: 78,
-    averagePerformance: 82.5,
-    recentSubmissions: 5,
-    upcomingEvents: 3,
-    unreadNotifications: 4,
-  }
-
-  const recentActivity = [
-    { id: 1, type: 'attendance', description: 'Recorded attendance for Form 1A', time: '2 hours ago' },
-    { id: 2, type: 'performance', description: 'Added performance scores for Math test', time: '3 hours ago' },
-    { id: 3, type: 'submission', description: 'Submitted announcement: Science Fair', time: '5 hours ago' },
-    { id: 4, type: 'attendance', description: 'Recorded attendance for Form 2B', time: '1 day ago' },
-    { id: 5, type: 'performance', description: 'Updated performance records', time: '2 days ago' },
-  ]
-
-  const upcomingEvents = [
-    { id: 1, title: 'Staff Meeting', date: '2024-03-18', time: '10:00 AM' },
-    { id: 2, title: 'Parent-Teacher Conference', date: '2024-03-20', time: '2:00 PM' },
-    { id: 3, title: 'Science Fair', date: '2024-03-25', time: '9:00 AM' },
-  ]
 
   const StatCard = ({ title, value, icon: Icon, description, trend }: any) => (
     <Card>
@@ -169,20 +278,26 @@ export default function TeacherDashboard() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {upcomingEvents.map((event) => (
-                <div key={event.id} className="flex items-center justify-between p-4 border rounded-lg">
-                  <div className="flex items-center space-x-3">
-                    <Calendar className="h-5 w-5 text-blue-500" />
-                    <div>
-                      <h4 className="font-medium">{event.title}</h4>
-                      <p className="text-sm text-gray-500">{event.date} at {event.time}</p>
+            {isLoading ? (
+              <div className="text-sm text-gray-500">Loading events...</div>
+            ) : upcomingEvents.length === 0 ? (
+              <div className="text-sm text-gray-500">No upcoming events</div>
+            ) : (
+              <div className="space-y-4">
+                {upcomingEvents.map((event) => (
+                  <div key={event.id} className="flex items-center justify-between p-4 border rounded-lg">
+                    <div className="flex items-center space-x-3">
+                      <Calendar className="h-5 w-5 text-blue-500" />
+                      <div>
+                        <h4 className="font-medium">{event.title}</h4>
+                        <p className="text-sm text-gray-500">{event.eventDate} at {event.eventTime || 'TBD'}</p>
+                      </div>
                     </div>
+                    <Badge variant="outline">Upcoming</Badge>
                   </div>
-                  <Badge variant="outline">Upcoming</Badge>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -230,38 +345,26 @@ export default function TeacherDashboard() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3">
-                <div className="flex items-center justify-between p-3 border rounded-lg">
-                  <div className="flex items-center space-x-3">
-                    <BookOpen className="h-5 w-5 text-blue-500" />
-                    <div>
-                      <h4 className="font-medium">Form 1A</h4>
-                      <p className="text-sm text-gray-500">35 students</p>
+              {isLoading ? (
+                <div className="text-sm text-gray-500">Loading classes...</div>
+              ) : classes.length === 0 ? (
+                <div className="text-sm text-gray-500">No classes assigned</div>
+              ) : (
+                <div className="space-y-3">
+                  {classes.map((classItem) => (
+                    <div key={classItem.id} className="flex items-center justify-between p-3 border rounded-lg">
+                      <div className="flex items-center space-x-3">
+                        <BookOpen className="h-5 w-5 text-blue-500" />
+                        <div>
+                          <h4 className="font-medium">{classItem.name}</h4>
+                          <p className="text-sm text-gray-500">{classItem.form} {classItem.stream}</p>
+                        </div>
+                      </div>
+                      <Badge variant="outline">Active</Badge>
                     </div>
-                  </div>
-                  <Badge variant="outline">Active</Badge>
+                  ))}
                 </div>
-                <div className="flex items-center justify-between p-3 border rounded-lg">
-                  <div className="flex items-center space-x-3">
-                    <BookOpen className="h-5 w-5 text-green-500" />
-                    <div>
-                      <h4 className="font-medium">Form 2B</h4>
-                      <p className="text-sm text-gray-500">38 students</p>
-                    </div>
-                  </div>
-                  <Badge variant="outline">Active</Badge>
-                </div>
-                <div className="flex items-center justify-between p-3 border rounded-lg">
-                  <div className="flex items-center space-x-3">
-                    <BookOpen className="h-5 w-5 text-purple-500" />
-                    <div>
-                      <h4 className="font-medium">Form 3C</h4>
-                      <p className="text-sm text-gray-500">32 students</p>
-                    </div>
-                  </div>
-                  <Badge variant="outline">Active</Badge>
-                </div>
-              </div>
+              )}
             </CardContent>
           </Card>
 
@@ -273,38 +376,31 @@ export default function TeacherDashboard() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3">
-                <div className="flex items-center justify-between p-3 border rounded-lg">
-                  <div className="flex items-center space-x-3">
-                    <Clock className="h-5 w-5 text-yellow-500" />
-                    <div>
-                      <h4 className="font-medium">Science Fair</h4>
-                      <p className="text-sm text-gray-500">Event announcement</p>
+              {isLoading ? (
+                <div className="text-sm text-gray-500">Loading submissions...</div>
+              ) : submissions.length === 0 ? (
+                <div className="text-sm text-gray-500">No submissions yet</div>
+              ) : (
+                <div className="space-y-3">
+                  {submissions.slice(0, 3).map((submission) => (
+                    <div key={submission.id} className="flex items-center justify-between p-3 border rounded-lg">
+                      <div className="flex items-center space-x-3">
+                        <Clock className={`h-5 w-5 ${submission.status === 'PENDING' ? 'text-yellow-500' : 'text-green-500'}`} />
+                        <div>
+                          <h4 className="font-medium">{submission.type}</h4>
+                          <p className="text-sm text-gray-500">{submission.description || 'No description'}</p>
+                        </div>
+                      </div>
+                      <Badge 
+                        variant={submission.status === 'PENDING' ? 'secondary' : 'default'} 
+                        className={submission.status === 'PENDING' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}
+                      >
+                        {submission.status}
+                      </Badge>
                     </div>
-                  </div>
-                  <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">Pending</Badge>
+                  ))}
                 </div>
-                <div className="flex items-center justify-between p-3 border rounded-lg">
-                  <div className="flex items-center space-x-3">
-                    <CheckCircle className="h-5 w-5 text-green-500" />
-                    <div>
-                      <h4 className="font-medium">Math Test Results</h4>
-                      <p className="text-sm text-gray-500">Performance records</p>
-                    </div>
-                  </div>
-                  <Badge variant="default" className="bg-green-100 text-green-800">Approved</Badge>
-                </div>
-                <div className="flex items-center justify-between p-3 border rounded-lg">
-                  <div className="flex items-center space-x-3">
-                    <CheckCircle className="h-5 w-5 text-green-500" />
-                    <div>
-                      <h4 className="font-medium">Daily Attendance</h4>
-                      <p className="text-sm text-gray-500">Attendance records</p>
-                    </div>
-                  </div>
-                  <Badge variant="default" className="bg-green-100 text-green-800">Approved</Badge>
-                </div>
-              </div>
+              )}
             </CardContent>
           </Card>
         </div>

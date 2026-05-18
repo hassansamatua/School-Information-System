@@ -28,12 +28,13 @@ import {
 interface TeacherClass {
   id: string
   name: string
-  form: number
-  stream: string
-  maxStudents: number
-  currentStudents: number
-  isActive: boolean
-  subject?: string
+  form: number | null
+  stream: string | null
+  maxStudents: number | null
+  teacherId: string | null
+  currentStudents?: number
+  createdAt: string | null
+  updatedAt: string | null
 }
 
 export default function TeacherClassesPage() {
@@ -42,47 +43,44 @@ export default function TeacherClassesPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
 
-  useEffect(() => {
-    // Mock data — replace with /api/teacher/classes when available
-    const mockClasses: TeacherClass[] = [
-      {
-        id: '1',
-        name: 'Form 1A',
-        form: 1,
-        stream: 'A',
-        maxStudents: 40,
-        currentStudents: 32,
-        isActive: true,
-        subject: 'Mathematics',
-      },
-      {
-        id: '2',
-        name: 'Form 2B',
-        form: 2,
-        stream: 'B',
-        maxStudents: 40,
-        currentStudents: 28,
-        isActive: true,
-        subject: 'Mathematics',
-      },
-      {
-        id: '3',
-        name: 'Form 3A',
-        form: 3,
-        stream: 'A',
-        maxStudents: 40,
-        currentStudents: 25,
-        isActive: true,
-        subject: 'Mathematics',
-      },
-    ]
+  const loadData = async () => {
+    try {
+      // Fetch teacher's data - try to find by userId if available, otherwise by email
+      const teachersRes = await fetch('/api/teachers')
+      if (!teachersRes.ok) throw new Error('Failed to load teacher data')
+      const teachersResponse = await teachersRes.json()
+      const teachersData = Array.isArray(teachersResponse) ? teachersResponse : (teachersResponse.data || [])
+      
+      // Try to find teacher by userId first, then by email
+      let teacherData = teachersData.find((t: any) => t.userId === user?.id)
+      if (!teacherData) {
+        teacherData = teachersData.find((t: any) => t.email === user?.email)
+      }
+      
+      if (!teacherData) {
+        console.warn('Teacher data not found for user:', user?.email, 'userId:', user?.id)
+        setClasses([])
+        setIsLoading(false)
+        return
+      }
 
-    const t = setTimeout(() => {
-      setClasses(mockClasses)
+      // Fetch classes for this teacher
+      const classesRes = await fetch('/api/classes')
+      if (!classesRes.ok) throw new Error('Failed to load classes')
+      const allClasses = await classesRes.json()
+      const teacherClasses = allClasses.filter((c: any) => c.teacherId === teacherData.id)
+      setClasses(teacherClasses)
+    } catch (error: any) {
+      console.error('Error loading classes data:', error)
+    } finally {
       setIsLoading(false)
-    }, 500)
-    return () => clearTimeout(t)
-  }, [])
+    }
+  }
+
+  useEffect(() => {
+    if (!isAuthorized || !user) return
+    loadData()
+  }, [isAuthorized, user])
 
   if (!isAuthorized) {
     return <div className="p-6">Loading...</div>
@@ -92,13 +90,12 @@ export default function TeacherClassesPage() {
     const q = searchQuery.toLowerCase()
     return (
       c.name.toLowerCase().includes(q) ||
-      c.stream.toLowerCase().includes(q) ||
-      (c.subject || '').toLowerCase().includes(q)
+      (c.stream || '').toLowerCase().includes(q)
     )
   })
 
-  const totalStudents = classes.reduce((sum, c) => sum + c.currentStudents, 0)
-  const totalCapacity = classes.reduce((sum, c) => sum + c.maxStudents, 0)
+  const totalStudents = classes.reduce((sum, c) => sum + (c.currentStudents || 0), 0)
+  const totalCapacity = classes.reduce((sum, c) => sum + (c.maxStudents || 0), 0)
   const occupancyRate = totalCapacity > 0 ? Math.round((totalStudents / totalCapacity) * 100) : 0
 
   return (
@@ -186,8 +183,7 @@ export default function TeacherClassesPage() {
                     <TableHead>Class</TableHead>
                     <TableHead>Form</TableHead>
                     <TableHead>Stream</TableHead>
-                    <TableHead>Subject</TableHead>
-                    <TableHead>Students</TableHead>
+                    <TableHead>Max Students</TableHead>
                     <TableHead>Status</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -195,16 +191,11 @@ export default function TeacherClassesPage() {
                   {filtered.map((c) => (
                     <TableRow key={c.id}>
                       <TableCell className="font-medium">{c.name}</TableCell>
-                      <TableCell>{c.form}</TableCell>
-                      <TableCell>{c.stream}</TableCell>
-                      <TableCell>{c.subject || '—'}</TableCell>
+                      <TableCell>{c.form || '—'}</TableCell>
+                      <TableCell>{c.stream || '—'}</TableCell>
+                      <TableCell>{c.maxStudents || '—'}</TableCell>
                       <TableCell>
-                        {c.currentStudents} / {c.maxStudents}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={c.isActive ? 'default' : 'secondary'}>
-                          {c.isActive ? 'Active' : 'Inactive'}
-                        </Badge>
+                        <Badge variant="default">Active</Badge>
                       </TableCell>
                     </TableRow>
                   ))}

@@ -123,28 +123,46 @@ export async function POST(request: NextRequest, ctx: { params: Promise<{ id: st
       case 'ATTENDANCE': {
         // data.records: [{ studentId, classId, date, status, remarks? }, ...]
         const records: any[] = Array.isArray(data.records) ? data.records : []
-        for (const r of records) {
-          if (!r.studentId || !r.classId || !r.date || !r.status) {
-            return NextResponse.json({ error: 'Invalid attendance record in data.records' }, { status: 400 })
+        
+        // Validate student IDs exist in database
+        const studentIds = records.map(r => r.studentId).filter(Boolean)
+        if (studentIds.length > 0) {
+          const studentCheck = await executeQuery<{ id: string }>(
+            `SELECT id FROM students WHERE id IN (${studentIds.map(() => '?').join(',')})`,
+            studentIds
+          )
+          const validStudentIds = new Set(studentCheck.map(s => s.id))
+          
+          // Filter out records with invalid student IDs
+          const validRecords = records.filter(r => r.studentId && validStudentIds.has(r.studentId))
+          
+          if (validRecords.length < records.length) {
+            console.warn(`Skipping ${records.length - validRecords.length} attendance records with invalid student IDs`)
           }
-          publishQueries.push({
-            query: `INSERT INTO attendance
-                      (id, date, status, remarks, studentId, classId, recordedBy)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                    ON DUPLICATE KEY UPDATE
-                      status = VALUES(status),
-                      remarks = VALUES(remarks),
-                      recordedBy = VALUES(recordedBy)`,
-            params: [
-              uuid(),
-              r.date,
-              r.status,
-              r.remarks || null,
-              r.studentId,
-              r.classId,
-              sub.submittedBy,
-            ],
-          })
+          
+          for (const r of validRecords) {
+            if (!r.studentId || !r.classId || !r.date || !r.status) {
+              return NextResponse.json({ error: 'Invalid attendance record in data.records' }, { status: 400 })
+            }
+            publishQueries.push({
+              query: `INSERT INTO attendance
+                        (id, date, status, remarks, studentId, classId, recordedBy)
+                      VALUES (?, ?, ?, ?, ?, ?, ?)
+                      ON DUPLICATE KEY UPDATE
+                        status = VALUES(status),
+                        remarks = VALUES(remarks),
+                        recordedBy = VALUES(recordedBy)`,
+              params: [
+                uuid(),
+                r.date,
+                r.status,
+                r.remarks || null,
+                r.studentId,
+                r.classId,
+                sub.submittedBy,
+              ],
+            })
+          }
         }
         break
       }

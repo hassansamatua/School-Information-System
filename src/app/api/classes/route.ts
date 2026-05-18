@@ -92,7 +92,7 @@ export async function GET() {
       form: cls.form,
       stream: cls.stream,
       maxStudents: cls.maxStudents,
-      currentStudents: cls.studentCount || 0,
+      currentStudents: Number(cls.studentCount || 0),
       isActive: cls.isActive,
       teacherId: cls.teacherId,
       teacherName: cls.teacherName,
@@ -111,7 +111,10 @@ export async function POST(request: NextRequest) {
     const isConnected = await testConnection()
     
     if (!isConnected) {
-      return ApiErrorHandler.handleValidationError('Database unavailable - Cannot create class when database is not connected', 'creating class')
+      return NextResponse.json(
+        { error: 'Database unavailable - Cannot create class when database is not connected' },
+        { status: 503 }
+      )
     }
     
     const body = await request.json()

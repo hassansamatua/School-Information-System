@@ -24,8 +24,10 @@ const pool = mysql.createPool({
   database: config.database,
   port: config.port,
   waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0
+  connectionLimit: 20,
+  queueLimit: 100,
+  enableKeepAlive: true,
+  keepAliveInitialDelay: 0
 });
 
 export async function getConnection() {

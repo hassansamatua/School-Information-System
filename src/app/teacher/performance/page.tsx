@@ -52,33 +52,30 @@ interface Student {
   registrationNumber: string
   firstName: string
   lastName: string
-  classId: string
-  className: string
+  classId: string | null
+  className: string | null
 }
 
 interface PerformanceRecord {
   id: string
   studentId: string
-  studentName: string
-  registrationNumber: string
   classId: string
-  className: string
   subject: string
   assessmentType: 'QUIZ' | 'TEST' | 'ASSIGNMENT' | 'PROJECT' | 'EXAM'
   score: number
   maxScore: number
-  grade?: string
-  remarks?: string
+  grade: string | null
+  remarks: string | null
   assessmentDate: string
-  recordedAt: string
+  createdAt: string
 }
 
 interface Class {
   id: string
   name: string
-  grade: string
-  section: string
-  studentCount: number
+  form: number | null
+  stream: string | null
+  teacherId: string | null
 }
 
 export default function PerformancePage() {
@@ -103,87 +100,74 @@ export default function PerformancePage() {
 
   const subjects = ['Mathematics', 'Science', 'English', 'History', 'Geography', 'Art', 'Music', 'Physical Education']
 
-  // Mock data - in real app, this would come from API
-  useEffect(() => {
-    const mockStudents: Student[] = [
-      { id: '1', registrationNumber: 'REG2024001', firstName: 'Alice', lastName: 'Johnson', classId: '1', className: 'Grade 5-A' },
-      { id: '2', registrationNumber: 'REG2024002', firstName: 'Bob', lastName: 'Smith', classId: '1', className: 'Grade 5-A' },
-      { id: '3', registrationNumber: 'REG2024003', firstName: 'Charlie', lastName: 'Brown', classId: '1', className: 'Grade 5-A' },
-      { id: '4', registrationNumber: 'REG2024004', firstName: 'Diana', lastName: 'Davis', classId: '2', className: 'Grade 6-B' },
-      { id: '5', registrationNumber: 'REG2024005', firstName: 'Edward', lastName: 'Wilson', classId: '2', className: 'Grade 6-B' },
-    ]
+  const loadData = async () => {
+    try {
+      // Fetch teacher's data - try to find by userId if available, otherwise by email
+      const teachersRes = await fetch('/api/teachers')
+      if (!teachersRes.ok) throw new Error('Failed to load teacher data')
+      const teachersResponse = await teachersRes.json()
+      const teachersData = Array.isArray(teachersResponse) ? teachersResponse : (teachersResponse.data || [])
+      
+      // Try to find teacher by userId first, then by email
+      let teacherData = teachersData.find((t: any) => t.userId === user?.id)
+      if (!teacherData) {
+        teacherData = teachersData.find((t: any) => t.email === user?.email)
+      }
+      
+      if (!teacherData) {
+        console.warn('Teacher data not found for user:', user?.email, 'userId:', user?.id)
+        // Don't throw error, just set empty data
+        setClasses([])
+        setStudents([])
+        setPerformanceRecords([])
+        setIsLoading(false)
+        return
+      }
 
-    const mockClasses: Class[] = [
-      { id: '1', name: 'Grade 5-A', grade: '5', section: 'A', studentCount: 3 },
-      { id: '2', name: 'Grade 6-B', grade: '6', section: 'B', studentCount: 2 },
-    ]
+      // Fetch classes for this teacher
+      const classesRes = await fetch('/api/classes')
+      if (!classesRes.ok) throw new Error('Failed to load classes')
+      const allClasses = await classesRes.json()
+      const teacherClasses = allClasses.filter((c: any) => c.teacherId === teacherData.id)
+      setClasses(teacherClasses)
 
-    const mockPerformanceRecords: PerformanceRecord[] = [
-      {
-        id: '1',
-        studentId: '1',
-        studentName: 'Alice Johnson',
-        registrationNumber: 'REG2024001',
-        classId: '1',
-        className: 'Grade 5-A',
-        subject: 'Mathematics',
-        assessmentType: 'TEST',
-        score: 85,
-        maxScore: 100,
-        grade: 'B',
-        remarks: 'Good performance',
-        assessmentDate: '2024-03-10',
-        recordedAt: '2024-03-10T15:30:00Z',
-      },
-      {
-        id: '2',
-        studentId: '2',
-        studentName: 'Bob Smith',
-        registrationNumber: 'REG2024002',
-        classId: '1',
-        className: 'Grade 5-A',
-        subject: 'Mathematics',
-        assessmentType: 'TEST',
-        score: 92,
-        maxScore: 100,
-        grade: 'A',
-        remarks: 'Excellent work',
-        assessmentDate: '2024-03-10',
-        recordedAt: '2024-03-10T15:30:00Z',
-      },
-      {
-        id: '3',
-        studentId: '3',
-        studentName: 'Charlie Brown',
-        registrationNumber: 'REG2024003',
-        classId: '1',
-        className: 'Grade 5-A',
-        subject: 'Science',
-        assessmentType: 'QUIZ',
-        score: 78,
-        maxScore: 100,
-        grade: 'C',
-        remarks: 'Needs improvement',
-        assessmentDate: '2024-03-12',
-        recordedAt: '2024-03-12T14:20:00Z',
-      },
-    ]
+      // Fetch students in teacher's classes
+      const studentsRes = await fetch('/api/students')
+      if (!studentsRes.ok) throw new Error('Failed to load students')
+      const allStudents = await studentsRes.json()
+      const teacherStudents = allStudents.filter((s: any) => teacherClasses.some((c: any) => c.id === s.classId))
+      setStudents(teacherStudents)
 
-    setTimeout(() => {
-      setStudents(mockStudents)
-      setClasses(mockClasses)
-      setPerformanceRecords(mockPerformanceRecords)
+      // Fetch performance records for teacher's classes
+      const performancePromises = teacherClasses.map((c: any) =>
+        fetch(`/api/performance?classId=${c.id}`).then(res => res.json())
+      )
+      const performanceResponses = await Promise.all(performancePromises)
+      const performanceData = performanceResponses.map((res: any) => res.data || []).flat()
+      setPerformanceRecords(performanceData)
+    } catch (error: any) {
+      console.error('Error loading performance data:', error)
+    } finally {
       setIsLoading(false)
-    }, 1000)
-  }, [])
+    }
+  }
+
+  useEffect(() => {
+    if (!isAuthorized || !user) return
+    loadData()
+  }, [isAuthorized, user])
 
   const filteredStudents = students.filter(student => {
     const matchesClass = !selectedClass || student.classId === selectedClass
-    const matchesSearch = student.firstName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    const matchesSearch = !searchQuery || 
+                         student.firstName.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          student.lastName.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          student.registrationNumber.toLowerCase().includes(searchQuery.toLowerCase())
     return matchesClass && matchesSearch
   })
+
+  // For the dialog, show all students regardless of class filter to allow adding performance for any student
+  const dialogStudents = students
 
   const filteredPerformanceRecords = performanceRecords.filter(record => {
     const matchesClass = !selectedClass || record.classId === selectedClass
@@ -246,24 +230,21 @@ export default function PerformancePage() {
         throw new Error(err.error || `Failed (${res.status})`)
       }
 
-      // Optimistic local UI update.
+      // Optimistic local UI update so the teacher sees the entries
       const newRecord: PerformanceRecord = {
         id: Date.now().toString(),
         studentId: formData.studentId,
-        studentName: student ? `${student.firstName} ${student.lastName}` : 'Unknown',
-        registrationNumber: student?.registrationNumber || '',
         classId: student?.classId || '',
-        className: student?.className || '',
         subject: formData.subject,
         assessmentType: formData.assessmentType as any,
-        score,
-        maxScore,
-        grade,
-        remarks: formData.remarks,
+        score: parseFloat(formData.score),
+        maxScore: parseFloat(formData.maxScore),
+        grade: calculateGrade(parseFloat(formData.score), parseFloat(formData.maxScore)),
+        remarks: formData.remarks || null,
         assessmentDate: formData.assessmentDate,
-        recordedAt: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
       }
-      setPerformanceRecords(prev => [newRecord, ...prev])
+      setPerformanceRecords((prev) => [...prev, newRecord])
       setIsAddPerformanceDialogOpen(false)
       setFormData({
         studentId: '',
@@ -300,6 +281,15 @@ export default function PerformancePage() {
       'F': 'text-red-600',
     }
     return colors[grade as keyof typeof colors] || 'text-gray-600'
+  }
+
+  const calculateGrade = (score: number, maxScore: number): string => {
+    const percentage = (score / maxScore) * 100
+    if (percentage >= 90) return 'A'
+    if (percentage >= 80) return 'B'
+    if (percentage >= 70) return 'C'
+    if (percentage >= 60) return 'D'
+    return 'F'
   }
 
   const getPerformanceStats = () => {
@@ -464,7 +454,7 @@ export default function PerformancePage() {
                         <SelectValue placeholder="Select student" />
                       </SelectTrigger>
                       <SelectContent>
-                        {filteredStudents.map((student) => (
+                        {dialogStudents.map((student) => (
                           <SelectItem key={student.id} value={student.id}>
                             {student.firstName} {student.lastName} ({student.registrationNumber})
                           </SelectItem>
@@ -587,53 +577,57 @@ export default function PerformancePage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredPerformanceRecords.map((record) => (
-                    <TableRow key={record.id}>
-                      <TableCell>
-                        <div className="flex items-center space-x-2">
-                          <GraduationCap className="h-4 w-4 text-gray-400" />
-                          <div>
-                            <div className="font-medium">{record.studentName}</div>
-                            <div className="text-sm text-gray-500">{record.registrationNumber}</div>
+                  {filteredPerformanceRecords.map((record) => {
+                    const student = students.find(s => s.id === record.studentId)
+                    if (!student) return null
+                    return (
+                      <TableRow key={record.id}>
+                        <TableCell>
+                          <div className="flex items-center space-x-2">
+                            <GraduationCap className="h-4 w-4 text-gray-400" />
+                            <div>
+                              <div className="font-medium">{student.firstName} {student.lastName}</div>
+                              <div className="text-sm text-gray-500">{student.registrationNumber}</div>
+                            </div>
                           </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center space-x-2">
-                          <BookOpen className="h-4 w-4 text-gray-400" />
-                          <span>{record.subject}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>{getAssessmentTypeBadge(record.assessmentType)}</TableCell>
-                      <TableCell>
-                        <div className="flex items-center space-x-2">
-                          <Target className="h-4 w-4 text-gray-400" />
-                          <span>{record.score}/{record.maxScore}</span>
-                          <span className="text-sm text-gray-500">
-                            ({((record.score / record.maxScore) * 100).toFixed(1)}%)
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center space-x-2">
+                            <BookOpen className="h-4 w-4 text-gray-400" />
+                            <span>{record.subject}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>{getAssessmentTypeBadge(record.assessmentType)}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center space-x-2">
+                            <Target className="h-4 w-4 text-gray-400" />
+                            <span>{record.score}/{record.maxScore}</span>
+                            <span className="text-sm text-gray-500">
+                              ({((record.score / record.maxScore) * 100).toFixed(1)}%)
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <span className={`font-semibold ${getGradeColor(record.grade || '')}`}>
+                            {record.grade || 'N/A'}
                           </span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <span className={`font-semibold ${getGradeColor(record.grade || '')}`}>
-                          {record.grade || 'N/A'}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center space-x-1">
-                          <Calendar className="h-4 w-4 text-gray-400" />
-                          <span>{new Date(record.assessmentDate).toLocaleDateString()}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {record.remarks ? (
-                          <span className="text-sm text-gray-600">{record.remarks}</span>
-                        ) : (
-                          <span className="text-sm text-gray-400">No remarks</span>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center space-x-1">
+                            <Calendar className="h-4 w-4 text-gray-400" />
+                            <span>{new Date(record.assessmentDate).toLocaleDateString()}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {record.remarks ? (
+                            <span className="text-sm text-gray-600">{record.remarks}</span>
+                          ) : (
+                            <span className="text-sm text-gray-400">No remarks</span>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
                 </TableBody>
               </Table>
             )}

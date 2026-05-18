@@ -3,7 +3,7 @@ import { executeQuery, testConnection } from '@/lib/mysql'
 import { ApiErrorHandler } from '@/lib/api-error-handler'
 
 // PUT update class
-export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const isConnected = await testConnection()
     
@@ -13,7 +13,11 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     
     const body = await request.json()
     const { name, form, stream, maxStudents, teacherId } = body
-    const { id } = params
+    const { id } = await params
+
+    if (!id) {
+      return ApiErrorHandler.handleValidationError('Class ID is required', 'updating class')
+    }
 
     // Validate required fields
     if (!form || !stream || !maxStudents) {
@@ -27,7 +31,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     )
 
     if (existingClass.length === 0) {
-      return ApiErrorHandler.handleNotFoundError('Class not found', 'updating class')
+      return ApiErrorHandler.handleNotFound('Class', 'updating class')
     }
 
     // Check if another class with same form and stream already exists
@@ -46,7 +50,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     // Update class
     await executeQuery(
       'UPDATE classes SET name = ?, form = ?, stream = ?, maxStudents = ?, teacherId = ? WHERE id = ?',
-      [className, form, stream, maxStudents, teacherId || null, id]
+      [className, form ?? null, stream ?? null, maxStudents ?? null, teacherId ?? null, id]
     )
 
     // Get the updated class with teacher information
@@ -97,7 +101,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
 }
 
 // DELETE class
-export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const isConnected = await testConnection()
     
@@ -105,7 +109,11 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
       return ApiErrorHandler.handleValidationError('Database unavailable - Cannot delete class when database is not connected', 'deleting class')
     }
     
-    const { id } = params
+    const { id } = await params
+
+    if (!id) {
+      return ApiErrorHandler.handleValidationError('Class ID is required', 'deleting class')
+    }
 
     // Check if class exists
     const existingClass = await executeQuery(
@@ -114,7 +122,7 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
     )
 
     if (existingClass.length === 0) {
-      return ApiErrorHandler.handleNotFoundError('Class not found', 'deleting class')
+      return ApiErrorHandler.handleNotFound('Class', 'deleting class')
     }
 
     // Check if class has students
