@@ -68,3 +68,41 @@ export async function GET() {
     return ApiErrorHandler.handleApiError(error, 'fetching teachers')
   }
 }
+
+// POST create teacher
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json()
+    const { firstName, lastName, email, password, phone, employeeId, department } = body
+
+    if (!firstName || !lastName || !email || !password || !employeeId) {
+      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+    }
+
+    // Create user first
+    const userId = await executeQuery<{ insertId: number }>(
+      `INSERT INTO users (email, password, role) VALUES (?, ?, 'TEACHER')`,
+      [email, password]
+    ).then(result => (result as any).insertId.toString())
+
+    // Then create teacher
+    const teacherId = await executeQuery<{ insertId: number }>(
+      `INSERT INTO teachers (userId, firstName, lastName, phone, employeeId, department, isActive) VALUES (?, ?, ?, ?, ?, ?, 1)`,
+      [userId, firstName, lastName, phone || null, employeeId, department || null]
+    ).then(result => (result as any).insertId.toString())
+
+    return NextResponse.json({
+      id: teacherId,
+      firstName,
+      lastName,
+      email,
+      phone,
+      employeeId,
+      department,
+      isActive: true,
+    }, { status: 201 })
+  } catch (error) {
+    console.error('Error creating teacher:', error)
+    return NextResponse.json({ error: 'Failed to create teacher' }, { status: 500 })
+  }
+}

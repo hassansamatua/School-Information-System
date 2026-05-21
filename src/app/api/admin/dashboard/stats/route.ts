@@ -48,7 +48,7 @@ export async function GET() {
     const performanceRows = await executeQuery<{ avg: number }>(
       'SELECT AVG((score / maxScore) * 100) AS avg FROM performance WHERE maxScore > 0'
     )
-    const averagePerformance = performanceRows[0]?.avg ? performanceRows[0].avg.toFixed(1) : '0.0'
+    const averagePerformance = performanceRows[0]?.avg ? Number(performanceRows[0].avg).toFixed(1) : '0.0'
 
     // Get recent activity (last 5 audit logs)
     const activityRows = await executeQuery<{

@@ -56,7 +56,7 @@ interface Submission {
   content: string
   targetAudience: 'ALL' | 'TEACHERS' | 'PARENTS' | 'SPECIFIC_CLASS' | 'SPECIFIC_STUDENT'
   targetId: string | null
-  status: 'DRAFT' | 'PENDING' | 'APPROVED' | 'REJECTED'
+  status: 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED'
   submittedBy: string
   submittedAt: string
   reviewedAt: string | null
@@ -72,10 +72,20 @@ interface Class {
   teacherId: string | null
 }
 
+interface Student {
+  id: string
+  registrationNumber: string
+  firstName: string
+  lastName: string
+  classId: string | null
+  className: string | null
+}
+
 export default function SubmissionsPage() {
   const { user, isAuthorized } = useRequireAuth('TEACHER')
   const [submissions, setSubmissions] = useState<Submission[]>([])
   const [classes, setClasses] = useState<Class[]>([])
+  const [students, setStudents] = useState<Student[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
@@ -89,6 +99,8 @@ export default function SubmissionsPage() {
     content: '',
     targetAudience: '',
     targetId: '',
+    targetIds: [] as string[],
+    selectedClass: '',
   })
 
   const loadSubmissions = async () => {
@@ -113,13 +125,13 @@ export default function SubmissionsPage() {
       if (!teachersRes.ok) throw new Error('Failed to load teacher data')
       const teachersResponse = await teachersRes.json()
       const teachersData = Array.isArray(teachersResponse) ? teachersResponse : (teachersResponse.data || [])
-      
+
       // Try to find teacher by userId first, then by email
       let teacherData = teachersData.find((t: any) => t.userId === user?.id)
       if (!teacherData) {
         teacherData = teachersData.find((t: any) => t.email === user?.email)
       }
-      
+
       if (!teacherData) {
         console.warn('Teacher data not found for user:', user?.email, 'userId:', user?.id)
         setClasses([])
@@ -138,9 +150,21 @@ export default function SubmissionsPage() {
     }
   }
 
+  const loadStudents = async () => {
+    try {
+      const res = await fetch('/api/students')
+      if (!res.ok) throw new Error('Failed to load students')
+      const data = await res.json()
+      const list = Array.isArray(data) ? data : (data?.data || [])
+      setStudents(list)
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
   useEffect(() => {
     if (!isAuthorized) return
-    Promise.all([loadSubmissions(), loadClasses()]).finally(() => setIsLoading(false))
+    Promise.all([loadSubmissions(), loadClasses(), loadStudents()]).finally(() => setIsLoading(false))
   }, [isAuthorized])
 
   const filteredSubmissions = submissions.filter(submission => {
@@ -154,7 +178,7 @@ export default function SubmissionsPage() {
   })
 
   const draftSubmissions = filteredSubmissions.filter(s => s.status === 'DRAFT')
-  const pendingSubmissions = filteredSubmissions.filter(s => s.status === 'PENDING')
+  const pendingSubmissions = filteredSubmissions.filter(s => s.status === 'PENDING_APPROVAL')
   const approvedSubmissions = filteredSubmissions.filter(s => s.status === 'APPROVED')
   const rejectedSubmissions = filteredSubmissions.filter(s => s.status === 'REJECTED')
 
@@ -164,6 +188,60 @@ export default function SubmissionsPage() {
         toast.error('Please fill in all required fields')
         return
       }
+
+      // For attendance submissions, verify the teacher is the class teacher
+      if (formData.type === 'ATTENDANCE') {
+        if (formData.targetAudience === 'SPECIFIC_CLASS') {
+          const selectedClassData = classes.find(c => c.id === formData.targetId)
+          if (!selectedClassData) {
+            toast.error('Invalid class selected')
+            return
+          }
+          // Check if this teacher is the class teacher for this class
+          const teachersRes = await fetch('/api/teachers')
+          if (!teachersRes.ok) throw new Error('Failed to verify teacher data')
+          const teachersResponse = await teachersRes.json()
+          const teachersData = Array.isArray(teachersResponse) ? teachersResponse : (teachersResponse.data || [])
+          const teacherData = teachersData.find((t: any) => t.userId === user?.id) || teachersData.find((t: any) => t.email === user?.email)
+
+          if (selectedClassData.teacherId !== teacherData?.id) {
+            toast.error('Only the class teacher can submit attendance for this class')
+            return
+          }
+        } else if (formData.targetAudience === 'SPECIFIC_STUDENT') {
+          // For specific students, check if the teacher is the class teacher for the students' class
+          const teachersRes = await fetch('/api/teachers')
+          if (!teachersRes.ok) throw new Error('Failed to verify teacher data')
+          const teachersResponse = await teachersRes.json()
+          const teachersData = Array.isArray(teachersResponse) ? teachersResponse : (teachersResponse.data || [])
+          const teacherData = teachersData.find((t: any) => t.userId === user?.id) || teachersData.find((t: any) => t.email === user?.email)
+
+          // Get the class of the selected students
+          const selectedStudents = students.filter(s => formData.targetIds.includes(s.id))
+          const uniqueClassIds = [...new Set(selectedStudents.map(s => s.classId).filter(Boolean))]
+
+          for (const classId of uniqueClassIds) {
+            const classData = classes.find(c => c.id === classId)
+            if (classData && classData.teacherId !== teacherData?.id) {
+              toast.error(`Only the class teacher can submit attendance for ${classData.name}`)
+              return
+            }
+          }
+        }
+      }
+
+      // For specific students, ensure at least one student is selected
+      if (formData.targetAudience === 'SPECIFIC_STUDENT' && formData.targetIds.length === 0) {
+        toast.error('Please select at least one student')
+        return
+      }
+
+      // For specific class, ensure a class is selected
+      if (formData.targetAudience === 'SPECIFIC_CLASS' && !formData.targetId) {
+        toast.error('Please select a class')
+        return
+      }
+
       const res = await fetch('/api/submissions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -172,7 +250,7 @@ export default function SubmissionsPage() {
           title: formData.title,
           content: formData.content,
           targetAudience: formData.targetAudience,
-          targetId: formData.targetId || undefined,
+          targetId: formData.targetAudience === 'SPECIFIC_STUDENT' ? formData.targetIds : formData.targetId || undefined,
           submitNow,
         }),
       })
@@ -183,7 +261,7 @@ export default function SubmissionsPage() {
       const created: Submission = await res.json()
       setSubmissions(prev => [created, ...prev])
       setIsCreateDialogOpen(false)
-      setFormData({ type: '', title: '', content: '', targetAudience: '', targetId: '' })
+      setFormData({ type: '', title: '', content: '', targetAudience: '', targetId: '', targetIds: [], selectedClass: '' })
       toast.success(submitNow ? 'Submission sent for approval' : 'Draft saved')
     } catch (error: any) {
       toast.error(error?.message || 'Failed to create submission')
@@ -247,7 +325,7 @@ export default function SubmissionsPage() {
     switch (status) {
       case 'DRAFT':
         return <Badge variant="outline">Draft</Badge>
-      case 'PENDING':
+      case 'PENDING_APPROVAL':
         return <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">Pending</Badge>
       case 'APPROVED':
         return <Badge variant="default" className="bg-green-100 text-green-800">Approved</Badge>
@@ -349,7 +427,7 @@ export default function SubmissionsPage() {
               <SelectContent>
                 <SelectItem value="all">All Status</SelectItem>
                 <SelectItem value="DRAFT">Draft</SelectItem>
-                <SelectItem value="PENDING">Pending</SelectItem>
+                <SelectItem value="PENDING_APPROVAL">Pending</SelectItem>
                 <SelectItem value="APPROVED">Approved</SelectItem>
                 <SelectItem value="REJECTED">Rejected</SelectItem>
               </SelectContent>
@@ -376,7 +454,7 @@ export default function SubmissionsPage() {
                 Create Submission
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[600px]">
+            <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Create New Submission</DialogTitle>
                 <DialogDescription>
@@ -436,7 +514,7 @@ export default function SubmissionsPage() {
                   </div>
                 </div>
                 
-                {(formData.targetAudience === 'SPECIFIC_CLASS' || formData.targetAudience === 'SPECIFIC_STUDENT') && (
+                {formData.targetAudience === 'SPECIFIC_CLASS' && (
                   <div className="space-y-2">
                     <Label htmlFor="targetId">Target</Label>
                     <Select value={formData.targetId} onValueChange={(value) => setFormData(prev => ({ ...prev, targetId: value }))}>
@@ -444,12 +522,60 @@ export default function SubmissionsPage() {
                         <SelectValue placeholder="Select target" />
                       </SelectTrigger>
                       <SelectContent>
-                        {formData.targetAudience === 'SPECIFIC_CLASS' && classes.map((cls) => (
+                        {classes.map((cls) => (
                           <SelectItem key={cls.id} value={cls.id}>{cls.name}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </div>
+                )}
+
+                {formData.targetAudience === 'SPECIFIC_STUDENT' && (
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="selectedClass">Select Class</Label>
+                      <Select value={formData.selectedClass} onValueChange={(value) => setFormData(prev => ({ ...prev, selectedClass: value, targetIds: [] }))}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a class first" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {classes.map((cls) => (
+                            <SelectItem key={cls.id} value={cls.id}>{cls.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {formData.selectedClass && (
+                      <div className="space-y-2">
+                        <Label>Select Students ({formData.targetIds.length} selected)</Label>
+                        <div className="border rounded-md p-4 max-h-60 overflow-y-auto space-y-2">
+                          {students
+                            .filter(s => s.classId === formData.selectedClass)
+                            .map((student) => (
+                              <div key={student.id} className="flex items-center space-x-2">
+                                <input
+                                  type="checkbox"
+                                  id={`student-${student.id}`}
+                                  checked={formData.targetIds.includes(student.id)}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setFormData(prev => ({ ...prev, targetIds: [...prev.targetIds, student.id] }))
+                                    } else {
+                                      setFormData(prev => ({ ...prev, targetIds: prev.targetIds.filter(id => id !== student.id) }))
+                                    }
+                                  }}
+                                  className="h-4 w-4"
+                                />
+                                <label htmlFor={`student-${student.id}`} className="text-sm cursor-pointer">
+                                  {student.firstName} {student.lastName} ({student.registrationNumber})
+                                </label>
+                              </div>
+                            ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
                 
                 <div className="space-y-2">

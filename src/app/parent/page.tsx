@@ -92,21 +92,21 @@ export default function ParentDashboard() {
           fetch(`/api/attendance?studentId=${child.id}`).then(res => res.json())
         )
         const attendanceData = await Promise.all(attendancePromises)
-        setAttendance(attendanceData.flat())
+        setAttendance(attendanceData.flatMap((response: any) => response.data || []))
 
         // Fetch performance for children
         const performancePromises = parentChildren.map((child: Student) =>
           fetch(`/api/performance?studentId=${child.id}`).then(res => res.json())
         )
         const performanceData = await Promise.all(performancePromises)
-        setPerformance(performanceData.flat())
+        setPerformance(performanceData.flatMap((response: any) => response.data || []))
 
         // Fetch results for children
         const resultsPromises = parentChildren.map((child: Student) =>
           fetch(`/api/results?studentId=${child.id}`).then(res => res.json())
         )
         const resultsData = await Promise.all(resultsPromises)
-        setResults(resultsData.flat())
+        setResults(resultsData.flatMap((response: any) => response.data || []))
       }
 
       // Fetch notifications
@@ -131,7 +131,13 @@ export default function ParentDashboard() {
   // Calculate stats
   const totalChildren = children.length
   const todayAttendance = attendance.filter(a => a.date === new Date().toISOString().split('T')[0] && a.status === 'PRESENT').length
-  const averagePerformance = performance.length > 0 
+  // Calculate overall attendance percentage
+  const totalAttendanceRecords = attendance.length
+  const presentRecords = attendance.filter(a => a.status === 'PRESENT').length
+  const attendancePercentage = totalAttendanceRecords > 0 
+    ? Math.round((presentRecords / totalAttendanceRecords) * 100)
+    : 0
+  const averagePerformance = performance.length > 0
     ? Math.round(performance.reduce((sum, p) => sum + (p.score / p.maxScore) * 100, 0) / performance.length)
     : 0
   const unreadNotifications = notifications.filter((n: any) => !n.isRead).length
@@ -139,6 +145,7 @@ export default function ParentDashboard() {
   const stats = {
     totalChildren,
     todayAttendance,
+    attendancePercentage,
     averagePerformance,
     unreadNotifications,
   }
@@ -228,11 +235,11 @@ export default function ParentDashboard() {
             description="Children in school"
           />
           <StatCard
-            title="Today's Attendance"
-            value={stats.todayAttendance}
+            title="Attendance"
+            value={`${stats.attendancePercentage}%`}
             icon={CheckCircle}
-            description="Present today"
-            trend="100% attendance"
+            description="Overall attendance"
+            trend={`${stats.todayAttendance} present today`}
           />
           <StatCard
             title="Average Performance"

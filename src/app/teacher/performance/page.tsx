@@ -78,15 +78,26 @@ interface Class {
   teacherId: string | null
 }
 
+interface Teacher {
+  id: string
+  firstName: string
+  lastName: string
+  email: string
+  department?: string
+}
+
 export default function PerformancePage() {
   const { user, isAuthorized } = useRequireAuth('TEACHER')
   const [students, setStudents] = useState<Student[]>([])
   const [classes, setClasses] = useState<Class[]>([])
   const [performanceRecords, setPerformanceRecords] = useState<PerformanceRecord[]>([])
+  const [teacher, setTeacher] = useState<Teacher | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedClass, setSelectedClass] = useState<string>('')
   const [selectedSubject, setSelectedSubject] = useState<string>('')
+  const [selectedStudent, setSelectedStudent] = useState<string>('')
+  const [viewMode, setViewMode] = useState<'CLASS' | 'STUDENT'>('CLASS')
   const [isAddPerformanceDialogOpen, setIsAddPerformanceDialogOpen] = useState(false)
   const [formData, setFormData] = useState({
     studentId: '',
@@ -98,7 +109,28 @@ export default function PerformancePage() {
     assessmentDate: new Date().toISOString().split('T')[0],
   })
 
-  const subjects = ['Mathematics', 'Science', 'English', 'History', 'Geography', 'Art', 'Music', 'Physical Education']
+  // Department to subjects mapping
+  const departmentSubjects: Record<string, string[]> = {
+    'Mathematics': ['Mathematics', 'Physics'],
+    'Science': ['Physics', 'Chemistry', 'Biology'],
+    'English': ['English', 'Literature'],
+    'Humanities': ['History', 'Geography', 'Civics'],
+    'Arts': ['Art', 'Music', 'Drama'],
+    'Physical Education': ['Physical Education', 'Sports'],
+    'Languages': ['English', 'French', 'Spanish', 'German'],
+  }
+
+  const allSubjects = ['Mathematics', 'Science', 'English', 'History', 'Geography', 'Art', 'Music', 'Physical Education', 'Physics', 'Chemistry', 'Biology', 'Literature', 'Civics', 'Drama', 'Sports', 'French', 'Spanish', 'German']
+
+  // Get subjects based on teacher's department
+  const getSubjectsForTeacher = () => {
+    if (teacher?.department && departmentSubjects[teacher.department]) {
+      return departmentSubjects[teacher.department]
+    }
+    return allSubjects
+  }
+
+  const subjects = getSubjectsForTeacher()
 
   const loadData = async () => {
     try {
@@ -107,13 +139,13 @@ export default function PerformancePage() {
       if (!teachersRes.ok) throw new Error('Failed to load teacher data')
       const teachersResponse = await teachersRes.json()
       const teachersData = Array.isArray(teachersResponse) ? teachersResponse : (teachersResponse.data || [])
-      
+
       // Try to find teacher by userId first, then by email
       let teacherData = teachersData.find((t: any) => t.userId === user?.id)
       if (!teacherData) {
         teacherData = teachersData.find((t: any) => t.email === user?.email)
       }
-      
+
       if (!teacherData) {
         console.warn('Teacher data not found for user:', user?.email, 'userId:', user?.id)
         // Don't throw error, just set empty data
@@ -122,6 +154,17 @@ export default function PerformancePage() {
         setPerformanceRecords([])
         setIsLoading(false)
         return
+      }
+
+      // Set teacher data
+      setTeacher(teacherData)
+
+      // Auto-select first subject from teacher's department
+      const teacherSubjects = teacherData.department && departmentSubjects[teacherData.department]
+        ? departmentSubjects[teacherData.department]
+        : allSubjects
+      if (teacherSubjects.length > 0 && !selectedSubject) {
+        setSelectedSubject(teacherSubjects[0])
       }
 
       // Fetch classes for this teacher
@@ -170,9 +213,14 @@ export default function PerformancePage() {
   const dialogStudents = students
 
   const filteredPerformanceRecords = performanceRecords.filter(record => {
-    const matchesClass = !selectedClass || record.classId === selectedClass
     const matchesSubject = !selectedSubject || record.subject === selectedSubject
-    return matchesClass && matchesSubject
+    if (viewMode === 'CLASS') {
+      const matchesClass = !selectedClass || record.classId === selectedClass
+      return matchesClass && matchesSubject
+    } else {
+      const matchesStudent = !selectedStudent || record.studentId === selectedStudent
+      return matchesStudent && matchesSubject
+    }
   })
 
   const handleAddPerformance = async () => {
@@ -391,20 +439,78 @@ export default function PerformancePage() {
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
             <Select
-              value={selectedClass || '__ALL__'}
-              onValueChange={(v) => setSelectedClass(v === '__ALL__' ? '' : v)}
+              value={viewMode}
+              onValueChange={(v: 'CLASS' | 'STUDENT') => {
+                setViewMode(v)
+                setSelectedClass('')
+                setSelectedStudent('')
+              }}
             >
-              <SelectTrigger className="w-[200px]">
-                <SelectValue placeholder="Select class" />
+              <SelectTrigger className="w-[150px]">
+                <SelectValue placeholder="View by" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="__ALL__">All Classes</SelectItem>
-                {classes.map((cls) => (
-                  <SelectItem key={cls.id} value={cls.id}>{cls.name}</SelectItem>
-                ))}
+                <SelectItem value="CLASS">View by Class</SelectItem>
+                <SelectItem value="STUDENT">View by Student</SelectItem>
               </SelectContent>
             </Select>
-            
+
+            {viewMode === 'CLASS' && (
+              <Select
+                value={selectedClass || '__ALL__'}
+                onValueChange={(v) => setSelectedClass(v === '__ALL__' ? '' : v)}
+              >
+                <SelectTrigger className="w-[200px]">
+                  <SelectValue placeholder="Select class" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__ALL__">All Classes</SelectItem>
+                  {classes.map((cls) => (
+                    <SelectItem key={cls.id} value={cls.id}>{cls.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+
+            {viewMode === 'STUDENT' && (
+              <>
+                <Select
+                  value={selectedClass}
+                  onValueChange={(v) => setSelectedClass(v)}
+                >
+                  <SelectTrigger className="w-[200px]">
+                    <SelectValue placeholder="Select class first" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {classes.map((cls) => (
+                      <SelectItem key={cls.id} value={cls.id}>{cls.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                {selectedClass && (
+                  <Select
+                    value={selectedStudent}
+                    onValueChange={(v) => setSelectedStudent(v)}
+                  >
+                    <SelectTrigger className="w-[200px]">
+                      <SelectValue placeholder="Select student" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__ALL__">All Students in Class</SelectItem>
+                      {students
+                        .filter(s => s.classId === selectedClass)
+                        .map((student) => (
+                          <SelectItem key={student.id} value={student.id}>
+                            {student.firstName} {student.lastName} ({student.registrationNumber})
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </>
+            )}
+
             <Select
               value={selectedSubject || '__ALL__'}
               onValueChange={(v) => setSelectedSubject(v === '__ALL__' ? '' : v)}
@@ -419,7 +525,7 @@ export default function PerformancePage() {
                 ))}
               </SelectContent>
             </Select>
-            
+
             <div className="relative">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input

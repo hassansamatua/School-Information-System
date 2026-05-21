@@ -129,21 +129,21 @@ export default function StudentsPage() {
           fetch(`/api/attendance?studentId=${child.id}`).then(res => res.json())
         )
         const attendanceData = await Promise.all(attendancePromises)
-        setAttendance(attendanceData.flat())
+        setAttendance(attendanceData.flatMap((response: any) => response.data || []))
 
         // Fetch performance for children
         const performancePromises = parentChildren.map((child: Student) =>
           fetch(`/api/performance?studentId=${child.id}`).then(res => res.json())
         )
         const performanceData = await Promise.all(performancePromises)
-        setPerformance(performanceData.flat())
+        setPerformance(performanceData.flatMap((response: any) => response.data || []))
 
         // Fetch results for children
         const resultsPromises = parentChildren.map((child: Student) =>
           fetch(`/api/results?studentId=${child.id}`).then(res => res.json())
         )
         const resultsData = await Promise.all(resultsPromises)
-        setResults(resultsData.flat())
+        setResults(resultsData.flatMap((response: any) => response.data || []))
       }
     } catch (error: any) {
       console.error('Error loading students data:', error)

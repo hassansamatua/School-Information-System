@@ -145,3 +145,53 @@ export async function DELETE(
     return NextResponse.json({ error: 'Failed to delete teacher' }, { status: 500 })
   }
 }
+
+// PATCH toggle teacher status
+export async function PATCH(
+  request: NextRequest,
+  ctx: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await ctx.params
+    const body = await request.json()
+    const { isActive } = body
+
+    if (isActive === undefined) {
+      return NextResponse.json({ error: 'isActive field is required' }, { status: 400 })
+    }
+
+    await executeQuery(
+      `UPDATE teachers SET isActive = ? WHERE id = ?`,
+      [isActive ? 1 : 0, id]
+    )
+
+    const teacherRows = await executeQuery<TeacherRow>(
+      `SELECT t.*, u.email AS user_email
+       FROM teachers t
+       LEFT JOIN users u ON u.id = t.userId
+       WHERE t.id = ? LIMIT 1`,
+      [id]
+    )
+
+    const classCountRows = await executeQuery<{ count: number }>(
+      'SELECT COUNT(*) AS count FROM classes WHERE teacherId = ?',
+      [id]
+    )
+
+    const t = teacherRows[0]
+    return NextResponse.json({
+      id: t.id,
+      firstName: t.firstName,
+      lastName: t.lastName,
+      email: t.user_email,
+      employeeId: t.employeeId,
+      department: t.department,
+      isActive: Boolean(t.isActive),
+      classCount: classCountRows[0]?.count ?? 0,
+      createdAt: t.createdAt,
+    })
+  } catch (error) {
+    console.error('Error updating teacher status:', error)
+    return NextResponse.json({ error: 'Failed to update teacher status' }, { status: 500 })
+  }
+}

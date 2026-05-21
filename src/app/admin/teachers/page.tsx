@@ -70,51 +70,33 @@ export default function TeachersPage() {
     department: '',
   })
 
-  // Mock data - in real app, this would come from API
+  // Fetch teachers from database
   useEffect(() => {
-    const mockTeachers: Teacher[] = [
-      {
-        id: '1',
-        firstName: 'John',
-        lastName: 'Smith',
-        email: 'john.smith@school.edu',
-        phone: '+1234567890',
-        employeeId: 'T001',
-        department: 'Mathematics',
-        isActive: true,
-        createdAt: '2024-01-15',
-        classes: 3,
-      },
-      {
-        id: '2',
-        firstName: 'Sarah',
-        lastName: 'Johnson',
-        email: 'sarah.johnson@school.edu',
-        phone: '+1234567891',
-        employeeId: 'T002',
-        department: 'Science',
-        isActive: true,
-        createdAt: '2024-01-20',
-        classes: 2,
-      },
-      {
-        id: '3',
-        firstName: 'Michael',
-        lastName: 'Brown',
-        email: 'michael.brown@school.edu',
-        phone: '+1234567892',
-        employeeId: 'T003',
-        department: 'English',
-        isActive: false,
-        createdAt: '2024-02-01',
-        classes: 0,
-      },
-    ]
-    
-    setTimeout(() => {
-      setTeachers(mockTeachers)
-      setIsLoading(false)
-    }, 1000)
+    const fetchTeachers = async () => {
+      try {
+        const response = await fetch('/api/teachers')
+        const data = await response.json()
+        const transformedData = data.map((t: any) => ({
+          id: t.id,
+          firstName: t.firstName,
+          lastName: t.lastName,
+          email: t.email,
+          phone: t.phone,
+          employeeId: t.employeeId,
+          department: t.department,
+          isActive: t.isActive,
+          createdAt: t.createdAt || new Date().toISOString(),
+          classes: t.classCount || 0,
+        }))
+        setTeachers(transformedData)
+      } catch (error) {
+        console.error('Error fetching teachers:', error)
+        toast.error('Failed to load teachers')
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    fetchTeachers()
   }, [])
 
   const filteredTeachers = teachers.filter(teacher =>
@@ -132,21 +114,20 @@ export default function TeachersPage() {
         return
       }
 
-      // Mock API call
-      const newTeacher: Teacher = {
-        id: Date.now().toString(),
-        firstName: formData.firstName,
-        lastName: formData.lastName,
-        email: formData.email,
-        phone: formData.phone,
-        employeeId: formData.employeeId,
-        department: formData.department,
-        isActive: true,
-        createdAt: new Date().toISOString(),
-        classes: 0,
+      const response = await fetch('/api/teachers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        toast.error(error.error || 'Failed to create teacher')
+        return
       }
 
-      setTeachers(prev => [...prev, newTeacher])
+      const newTeacher = await response.json()
+      setTeachers(prev => [...prev, { ...newTeacher, classes: 0 }])
       setIsCreateDialogOpen(false)
       setFormData({
         firstName: '',
@@ -167,18 +148,26 @@ export default function TeachersPage() {
     try {
       if (!selectedTeacher) return
 
-      // Mock API call
-      const updatedTeacher = {
-        ...selectedTeacher,
-        firstName: formData.firstName,
-        lastName: formData.lastName,
-        email: formData.email,
-        phone: formData.phone,
-        employeeId: formData.employeeId,
-        department: formData.department,
+      const response = await fetch(`/api/teachers/${selectedTeacher.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          firstName: formData.firstName,
+          lastName: formData.lastName,
+          phone: formData.phone,
+          department: formData.department,
+          isActive: selectedTeacher.isActive,
+        }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        toast.error(error.error || 'Failed to update teacher')
+        return
       }
 
-      setTeachers(prev => prev.map(t => t.id === selectedTeacher.id ? updatedTeacher : t))
+      const updatedTeacher = await response.json()
+      setTeachers(prev => prev.map(t => t.id === selectedTeacher.id ? { ...updatedTeacher, classes: t.classes } : t))
       setIsEditDialogOpen(false)
       setSelectedTeacher(null)
       setFormData({
@@ -198,9 +187,23 @@ export default function TeachersPage() {
 
   const handleToggleStatus = async (teacherId: string) => {
     try {
-      setTeachers(prev => prev.map(t => 
-        t.id === teacherId ? { ...t, isActive: !t.isActive } : t
-      ))
+      const teacher = teachers.find(t => t.id === teacherId)
+      if (!teacher) return
+
+      const response = await fetch(`/api/teachers/${teacherId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isActive: !teacher.isActive }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        toast.error(error.error || 'Failed to update teacher status')
+        return
+      }
+
+      const updatedTeacher = await response.json()
+      setTeachers(prev => prev.map(t => t.id === teacherId ? { ...updatedTeacher, classes: t.classes } : t))
       toast.success('Teacher status updated')
     } catch (error) {
       toast.error('Failed to update teacher status')
@@ -209,6 +212,16 @@ export default function TeachersPage() {
 
   const handleDeleteTeacher = async (teacherId: string) => {
     try {
+      const response = await fetch(`/api/teachers/${teacherId}`, {
+        method: 'DELETE',
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        toast.error(error.error || 'Failed to delete teacher')
+        return
+      }
+
       setTeachers(prev => prev.filter(t => t.id !== teacherId))
       toast.success('Teacher deleted successfully')
     } catch (error) {
