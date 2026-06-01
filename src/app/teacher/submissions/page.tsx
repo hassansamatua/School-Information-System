@@ -101,6 +101,9 @@ export default function SubmissionsPage() {
     targetId: '',
     targetIds: [] as string[],
     selectedClass: '',
+    eventDate: '',
+    eventTime: '',
+    venue: '',
   })
 
   const loadSubmissions = async () => {
@@ -189,6 +192,12 @@ export default function SubmissionsPage() {
         return
       }
 
+      // Event submissions require an event date
+      if (formData.type === 'EVENT' && !formData.eventDate) {
+        toast.error('Please provide the event date')
+        return
+      }
+
       // For attendance submissions, verify the teacher is the class teacher
       if (formData.type === 'ATTENDANCE') {
         if (formData.targetAudience === 'SPECIFIC_CLASS') {
@@ -251,6 +260,9 @@ export default function SubmissionsPage() {
           content: formData.content,
           targetAudience: formData.targetAudience,
           targetId: formData.targetAudience === 'SPECIFIC_STUDENT' ? formData.targetIds : formData.targetId || undefined,
+          data: formData.type === 'EVENT'
+            ? { eventDate: formData.eventDate, eventTime: formData.eventTime || null, venue: formData.venue || null }
+            : undefined,
           submitNow,
         }),
       })
@@ -261,7 +273,7 @@ export default function SubmissionsPage() {
       const created: Submission = await res.json()
       setSubmissions(prev => [created, ...prev])
       setIsCreateDialogOpen(false)
-      setFormData({ type: '', title: '', content: '', targetAudience: '', targetId: '', targetIds: [], selectedClass: '' })
+      setFormData({ type: '', title: '', content: '', targetAudience: '', targetId: '', targetIds: [], selectedClass: '', eventDate: '', eventTime: '', venue: '' })
       toast.success(submitNow ? 'Submission sent for approval' : 'Draft saved')
     } catch (error: any) {
       toast.error(error?.message || 'Failed to create submission')
@@ -578,6 +590,38 @@ export default function SubmissionsPage() {
                   </>
                 )}
                 
+                {formData.type === 'EVENT' && (
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="eventDate">Event Date</Label>
+                      <Input
+                        id="eventDate"
+                        type="date"
+                        value={formData.eventDate}
+                        onChange={(e) => setFormData(prev => ({ ...prev, eventDate: e.target.value }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="eventTime">Event Time</Label>
+                      <Input
+                        id="eventTime"
+                        type="time"
+                        value={formData.eventTime}
+                        onChange={(e) => setFormData(prev => ({ ...prev, eventTime: e.target.value }))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="venue">Venue</Label>
+                      <Input
+                        id="venue"
+                        value={formData.venue}
+                        onChange={(e) => setFormData(prev => ({ ...prev, venue: e.target.value }))}
+                        placeholder="Optional"
+                      />
+                    </div>
+                  </div>
+                )}
+
                 <div className="space-y-2">
                   <Label htmlFor="title">Title</Label>
                   <Input

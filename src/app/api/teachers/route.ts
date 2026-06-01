@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { executeQuery, testConnection } from '@/lib/mysql'
+import { v4 as uuid } from 'uuid'
+import { executeQuery, executeTransaction, testConnection } from '@/lib/mysql'
 import { ApiErrorHandler } from '@/lib/api-error-handler'
+import bcrypt from 'bcryptjs'
 
 // GET all teachers
 export async function GET() {
@@ -79,17 +81,38 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
-    // Create user first
-    const userId = await executeQuery<{ insertId: number }>(
-      `INSERT INTO users (email, password, role) VALUES (?, ?, 'TEACHER')`,
-      [email, password]
-    ).then(result => (result as any).insertId.toString())
+    // Check for duplicate email
+    const existing = await executeQuery<any[]>(
+      'SELECT id FROM users WHERE email = ? LIMIT 1',
+      [email]
+    )
+    if ((existing as any[]).length > 0) {
+      return NextResponse.json({ error: 'Email already exists' }, { status: 400 })
+    }
 
-    // Then create teacher
-    const teacherId = await executeQuery<{ insertId: number }>(
-      `INSERT INTO teachers (userId, firstName, lastName, phone, employeeId, department, isActive) VALUES (?, ?, ?, ?, ?, ?, 1)`,
-      [userId, firstName, lastName, phone || null, employeeId, department || null]
-    ).then(result => (result as any).insertId.toString())
+    // Check for duplicate employeeId
+    const existingEmployee = await executeQuery<any[]>(
+      'SELECT id FROM teachers WHERE employeeId = ? LIMIT 1',
+      [employeeId]
+    )
+    if ((existingEmployee as any[]).length > 0) {
+      return NextResponse.json({ error: 'Employee ID already exists' }, { status: 400 })
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 12)
+    const userId = uuid()
+    const teacherId = uuid()
+
+    await executeTransaction([
+      {
+        query: 'INSERT INTO users (id, email, password, role, isActive) VALUES (?, ?, ?, \'TEACHER\', 1)',
+        params: [userId, email, hashedPassword]
+      },
+      {
+        query: 'INSERT INTO teachers (id, userId, firstName, lastName, phone, employeeId, department, isActive) VALUES (?, ?, ?, ?, ?, ?, ?, 1)',
+        params: [teacherId, userId, firstName, lastName, phone || null, employeeId, department || null]
+      },
+    ])
 
     return NextResponse.json({
       id: teacherId,

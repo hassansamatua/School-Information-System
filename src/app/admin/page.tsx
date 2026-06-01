@@ -95,21 +95,18 @@ export default function AdminDashboard() {
             value={stats.totalStudents}
             icon={GraduationCap}
             description="Active students"
-            trend="+12% from last month"
           />
           <StatCard
             title="Total Teachers"
             value={stats.totalTeachers}
             icon={Users}
             description="Active teachers"
-            trend="+2 new this month"
           />
           <StatCard
             title="Total Parents"
             value={stats.totalParents}
             icon={UserCheck}
             description="Registered parents"
-            trend="+8% from last month"
           />
           <StatCard
             title="Total Classes"
@@ -126,28 +123,24 @@ export default function AdminDashboard() {
             value={stats.pendingApprovals}
             icon={Clock}
             description="Waiting for review"
-            trend="Requires attention"
           />
           <StatCard
             title="Today's Attendance"
             value={stats.todayAttendance}
             icon={CheckCircle}
-            description={`${((stats.todayAttendance / stats.totalStudents) * 100).toFixed(1)}% attendance rate`}
-            trend="Above average"
+            description={`${stats.totalStudents > 0 ? ((stats.todayAttendance / stats.totalStudents) * 100).toFixed(1) : '0'}% attendance rate`}
           />
           <StatCard
             title="Average Performance"
             value={`${stats.averagePerformance}%`}
             icon={TrendingUp}
             description="Overall student performance"
-            trend="+3% improvement"
           />
           <StatCard
             title="System Health"
             value="Good"
             icon={AlertCircle}
             description="All systems operational"
-            trend="No issues"
           />
         </div>
 

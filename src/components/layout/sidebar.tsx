@@ -329,7 +329,7 @@ export function Sidebar({ className }: SidebarProps) {
         <div className="border-t p-4">
           <div className={cn("flex items-center space-x-2", isCollapsed && "justify-center")}>
             <Avatar className="h-8 w-8">
-              <AvatarImage src={session?.user?.image || ""} alt={session?.user?.name || ""} />
+              <AvatarImage src="" alt={session?.user?.name || ""} />
               <AvatarFallback>
                 {session?.user?.name?.split(' ').map(n => n[0]).join('').toUpperCase() || 'U'}
               </AvatarFallback>

@@ -188,7 +188,6 @@ export default function TeacherDashboard() {
             value={stats.totalStudents}
             icon={GraduationCap}
             description="Students in your classes"
-            trend="+5 new this month"
           />
           <StatCard
             title="My Classes"
@@ -201,14 +200,12 @@ export default function TeacherDashboard() {
             value={stats.pendingApprovals}
             icon={Clock}
             description="Waiting for admin approval"
-            trend="Requires attention"
           />
           <StatCard
             title="Today's Attendance"
             value={stats.todayAttendance}
             icon={CheckCircle}
-            description={`${((stats.todayAttendance / stats.totalStudents) * 100).toFixed(1)}% attendance rate`}
-            trend="Good attendance"
+            description={`${stats.totalStudents > 0 ? ((stats.todayAttendance / stats.totalStudents) * 100).toFixed(1) : '0'}% attendance rate`}
           />
         </div>
 
@@ -216,10 +213,9 @@ export default function TeacherDashboard() {
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <StatCard
             title="Average Performance"
-            value={`${stats.averagePerformance}%`}
+            value={`${Math.round(stats.averagePerformance)}%`}
             icon={TrendingUp}
             description="Overall student performance"
-            trend="+2% improvement"
           />
           <StatCard
             title="Recent Submissions"
@@ -238,7 +234,6 @@ export default function TeacherDashboard() {
             value={stats.unreadNotifications}
             icon={AlertCircle}
             description="Need your attention"
-            trend="Check notifications"
           />
         </div>
 

@@ -68,7 +68,9 @@ export async function GET(request: NextRequest) {
 
     const [rows, countRows] = await Promise.all([
       executeQuery<Row>(
-        `SELECT a.*,
+        `SELECT a.id, a.studentId, a.classId,
+           DATE_FORMAT(a.date, '%Y-%m-%d') AS date,
+           a.status, a.remarks, a.recordedBy, a.createdAt,
            s.firstName AS student_firstName, s.lastName AS student_lastName, s.registrationNumber AS student_registrationNumber,
            c.name AS class_name, c.form AS class_form, c.stream AS class_stream,
            u.email AS user_email
@@ -132,7 +134,9 @@ export async function POST(request: NextRequest) {
     )
 
     const rows = await executeQuery<Row>(
-      `SELECT a.*,
+      `SELECT a.id, a.studentId, a.classId,
+         DATE_FORMAT(a.date, '%Y-%m-%d') AS date,
+         a.status, a.remarks, a.recordedBy, a.createdAt,
          s.firstName AS student_firstName, s.lastName AS student_lastName, s.registrationNumber AS student_registrationNumber,
          c.name AS class_name, c.form AS class_form, c.stream AS class_stream,
          u.email AS user_email

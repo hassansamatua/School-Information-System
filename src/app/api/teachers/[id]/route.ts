@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { executeQuery } from '@/lib/mysql'
+import bcrypt from 'bcryptjs'
 
 interface TeacherRow {
   id: string
@@ -76,7 +77,7 @@ export async function PUT(
   try {
     const { id } = await ctx.params
     const body = await request.json()
-    const { firstName, lastName, phone, department, isActive } = body || {}
+    const { firstName, lastName, phone, department, isActive, password } = body || {}
 
     if (!firstName || !lastName) {
       return NextResponse.json({ error: 'First name and last name are required' }, { status: 400 })
@@ -87,6 +88,18 @@ export async function PUT(
        WHERE id = ?`,
       [firstName, lastName, phone || null, department || null, isActive !== undefined ? (isActive ? 1 : 0) : 1, id]
     )
+
+    // If password provided, update it with bcrypt hash
+    if (password) {
+      const hashedPassword = await bcrypt.hash(password, 12)
+      await executeQuery(
+        `UPDATE users u
+         JOIN teachers t ON t.userId = u.id
+         SET u.password = ?
+         WHERE t.id = ?`,
+        [hashedPassword, id]
+      )
+    }
 
     const teacherRows = await executeQuery<TeacherRow>(
       `SELECT t.*, u.email AS user_email

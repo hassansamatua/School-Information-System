@@ -239,21 +239,18 @@ export default function ParentDashboard() {
             value={`${stats.attendancePercentage}%`}
             icon={CheckCircle}
             description="Overall attendance"
-            trend={`${stats.todayAttendance} present today`}
           />
           <StatCard
             title="Average Performance"
             value={`${stats.averagePerformance}%`}
             icon={TrendingUp}
             description="Overall performance"
-            trend="+3% improvement"
           />
           <StatCard
             title="Unread Notifications"
             value={stats.unreadNotifications}
             icon={Bell}
             description="Need your attention"
-            trend="Check notifications"
           />
         </div>
 

@@ -148,16 +148,21 @@ export default function TeachersPage() {
     try {
       if (!selectedTeacher) return
 
+      const updateData: any = {
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        phone: formData.phone,
+        department: formData.department,
+        isActive: selectedTeacher.isActive,
+      }
+      if (formData.password) {
+        updateData.password = formData.password
+      }
+
       const response = await fetch(`/api/teachers/${selectedTeacher.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          firstName: formData.firstName,
-          lastName: formData.lastName,
-          phone: formData.phone,
-          department: formData.department,
-          isActive: selectedTeacher.isActive,
-        }),
+        body: JSON.stringify(updateData),
       })
 
       if (!response.ok) {
@@ -521,6 +526,16 @@ export default function TeachersPage() {
                   value={formData.department}
                   onChange={(e) => setFormData(prev => ({ ...prev, department: e.target.value }))}
                   placeholder="Department"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-password">Reset Password <span className="text-xs text-muted-foreground">(leave blank to keep current)</span></Label>
+                <Input
+                  id="edit-password"
+                  type="password"
+                  value={formData.password}
+                  onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
+                  placeholder="New password"
                 />
               </div>
             </div>

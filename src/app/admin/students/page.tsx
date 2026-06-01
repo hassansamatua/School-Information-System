@@ -205,12 +205,15 @@ export default function StudentsPage() {
     fetchData()
   }, [])
 
-  const filteredStudents = students.filter(student =>
-    student.firstName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    student.lastName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    student.registrationNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    student.email?.toLowerCase().includes(searchQuery.toLowerCase())
-  )
+  const filteredStudents = students.filter(student => {
+    const q = searchQuery.toLowerCase()
+    return (
+      (student.firstName?.toLowerCase().includes(q)) ||
+      (student.lastName?.toLowerCase().includes(q)) ||
+      (student.registrationNumber?.toLowerCase().includes(q)) ||
+      (student.email?.toLowerCase().includes(q))
+    )
+  })
 
   const activeStudents = filteredStudents.filter(s => s.isActive)
   const inactiveStudents = filteredStudents.filter(s => !s.isActive)
@@ -248,7 +251,8 @@ export default function StudentsPage() {
         throw new Error(error.error || 'Failed to create student')
       }
 
-      const newStudent = await response.json()
+      const created = await response.json()
+      const newStudent = created.data ?? created
       setStudents(prev => [...prev, newStudent])
       setIsCreateDialogOpen(false)
       setFormData({
