@@ -95,8 +95,9 @@ export default function TeacherDashboard() {
       )
       const performanceResponses = await Promise.all(performancePromises)
       const performanceData = performanceResponses.map((res: any) => res.data || []).flat()
-      const avgPerformance = performanceData.length > 0
-        ? performanceData.reduce((sum: number, p: any) => sum + (p.score || 0), 0) / performanceData.length
+      const validPerformance = performanceData.filter((p: any) => Number(p.maxScore) > 0)
+      const avgPerformance = validPerformance.length > 0
+        ? validPerformance.reduce((sum: number, p: any) => sum + (Number(p.score) / Number(p.maxScore)) * 100, 0) / validPerformance.length
         : 0
 
       // Fetch submissions
@@ -213,7 +214,7 @@ export default function TeacherDashboard() {
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <StatCard
             title="Average Performance"
-            value={`${Math.round(stats.averagePerformance)}%`}
+            value={`${Number.isFinite(stats.averagePerformance) ? Math.round(stats.averagePerformance) : 0}%`}
             icon={TrendingUp}
             description="Overall student performance"
           />
@@ -293,40 +294,6 @@ export default function TeacherDashboard() {
                 ))}
               </div>
             )}
-          </CardContent>
-        </Card>
-
-        {/* Quick Actions */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Quick Actions</CardTitle>
-            <CardDescription>
-              Common tasks you can perform
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-              <div className="p-4 border rounded-lg hover:bg-gray-50 cursor-pointer">
-                <CheckCircle className="h-8 w-8 text-green-500 mb-2" />
-                <h3 className="font-medium">Mark Attendance</h3>
-                <p className="text-sm text-gray-500">Record daily attendance</p>
-              </div>
-              <div className="p-4 border rounded-lg hover:bg-gray-50 cursor-pointer">
-                <TrendingUp className="h-8 w-8 text-blue-500 mb-2" />
-                <h3 className="font-medium">Add Performance</h3>
-                <p className="text-sm text-gray-500">Record student performance</p>
-              </div>
-              <div className="p-4 border rounded-lg hover:bg-gray-50 cursor-pointer">
-                <FileText className="h-8 w-8 text-orange-500 mb-2" />
-                <h3 className="font-medium">Create Announcement</h3>
-                <p className="text-sm text-gray-500">Post new announcement</p>
-              </div>
-              <div className="p-4 border rounded-lg hover:bg-gray-50 cursor-pointer">
-                <Users className="h-8 w-8 text-purple-500 mb-2" />
-                <h3 className="font-medium">View Students</h3>
-                <p className="text-sm text-gray-500">See your class students</p>
-              </div>
-            </div>
           </CardContent>
         </Card>
 

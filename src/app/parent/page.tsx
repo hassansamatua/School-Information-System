@@ -382,40 +382,6 @@ export default function ParentDashboard() {
           </CardContent>
         </Card>
 
-        {/* Quick Actions */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Quick Actions</CardTitle>
-            <CardDescription>
-              Common tasks you can perform
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-              <div className="p-4 border rounded-lg hover:bg-gray-50 cursor-pointer">
-                <Users className="h-8 w-8 text-blue-500 mb-2" />
-                <h3 className="font-medium">View Children</h3>
-                <p className="text-sm text-gray-500">See detailed information</p>
-              </div>
-              <div className="p-4 border rounded-lg hover:bg-gray-50 cursor-pointer">
-                <CheckCircle className="h-8 w-8 text-green-500 mb-2" />
-                <h3 className="font-medium">Attendance</h3>
-                <p className="text-sm text-gray-500">View attendance records</p>
-              </div>
-              <div className="p-4 border rounded-lg hover:bg-gray-50 cursor-pointer">
-                <TrendingUp className="h-8 w-8 text-purple-500 mb-2" />
-                <h3 className="font-medium">Performance</h3>
-                <p className="text-sm text-gray-500">Check performance data</p>
-              </div>
-              <div className="p-4 border rounded-lg hover:bg-gray-50 cursor-pointer">
-                <Award className="h-8 w-8 text-orange-500 mb-2" />
-                <h3 className="font-medium">Results</h3>
-                <p className="text-sm text-gray-500">View exam results</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
         {/* Announcements Preview */}
         <Card>
           <CardHeader>

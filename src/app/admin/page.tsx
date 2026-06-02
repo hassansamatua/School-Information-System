@@ -172,39 +172,6 @@ export default function AdminDashboard() {
           </CardContent>
         </Card>
 
-        {/* Quick Actions */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Quick Actions</CardTitle>
-            <CardDescription>
-              Common administrative tasks
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-              <div className="p-4 border rounded-lg hover:bg-gray-50 cursor-pointer">
-                <Users className="h-8 w-8 text-blue-500 mb-2" />
-                <h3 className="font-medium">Add Teacher</h3>
-                <p className="text-sm text-gray-500">Create new teacher account</p>
-              </div>
-              <div className="p-4 border rounded-lg hover:bg-gray-50 cursor-pointer">
-                <GraduationCap className="h-8 w-8 text-green-500 mb-2" />
-                <h3 className="font-medium">Add Student</h3>
-                <p className="text-sm text-gray-500">Register new student</p>
-              </div>
-              <div className="p-4 border rounded-lg hover:bg-gray-50 cursor-pointer">
-                <BookOpen className="h-8 w-8 text-purple-500 mb-2" />
-                <h3 className="font-medium">Create Class</h3>
-                <p className="text-sm text-gray-500">Set up new class</p>
-              </div>
-              <div className="p-4 border rounded-lg hover:bg-gray-50 cursor-pointer">
-                <CheckCircle className="h-8 w-8 text-orange-500 mb-2" />
-                <h3 className="font-medium">Review Approvals</h3>
-                <p className="text-sm text-gray-500">Check pending items</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
       </div>
     </DashboardLayout>
   )
